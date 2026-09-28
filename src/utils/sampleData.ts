@@ -9,4 +9,7 @@ export const SAMPLE_CSV = `Mitgliedsnummer;Reihenfolge;Eintrittsjahr (Import);Ak
 10370;357;2005;0;0;0;passive;Mustername;Kind2;Musterweg 2;88456 Ingoldingen;01.01.2004;07355-000002;;;;2005-03-24;;;;;Mustername, Mann;;;n.a.;;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 10501;501;2015;0;0;0;active;Huber;Hans;Beispielweg 3;88456 Ingoldingen;01.01.1985;07355-000003;;hans.huber@example.com;;2015-05-01;;;;;Huber, Hans;DE89370400440532013000;TESTDEDDXXX;MANDAT-SZI-003;01.05.2015;0;0;0;0;0;Akkord;g1_11;;;0;0;0;0;0;;;;
 10502;502;2018;0;0;0;passive;Schmidt;Peter;Beispielweg 4;88456 Ingoldingen;01.01.1970;;;peter.schmidt@example.com;;2018-01-15;;;;;Schmidt, Peter;DE23100000000000000002;TESTDEDDXXX;MANDAT-SZI-004;15.01.2018;0;0;0;0;0;;;;;0;0;0;0;0;;;;
+10503;503;2016;0;0;0;active;Weber;Markus;Vorstandsweg 1;88456 Ingoldingen;01.01.1980;07355-000004;;markus.weber@example.com;;2016-01-01;;1. Vorstand;;;Weber, Markus;DE93100000000000000003;TESTDEDDXXX;MANDAT-SZI-005;01.01.2016;0;0;0;0;0;;;;;0;0;0;0;0;;;;
+10504;504;1990;0;0;0;active;Albrecht;Anton;Ehrenweg 5;88456 Ingoldingen;01.01.1950;07355-000005;;anton.albrecht@example.com;;1990-01-01;;Ehrenvorstand;;;Albrecht, Anton;DE66100000000000000004;TESTDEDDXXX;MANDAT-SZI-006;01.01.1990;0;0;0;0;0;;;;;0;0;0;0;0;;;;
+10505;505;1985;0;0;0;passive;Maier;Josef;Ehrenweg 6;88456 Ingoldingen;01.01.1945;07355-000006;;josef.maier@example.com;;1985-01-01;;;Ehrenmitglied;;Maier, Josef;DE39100000000000000005;TESTDEDDXXX;MANDAT-SZI-007;01.01.1985;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 `;

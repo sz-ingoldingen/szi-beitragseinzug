@@ -136,12 +136,45 @@ export function normalizeName(str: string): string {
 }
 
 /**
- * Prüft, ob ein Mitglied ein beitragsbefreites Ehrenamt bekleidet (z.B. Vorstandschaft).
+ * Prüft, ob ein Mitglied ein beitragsbefreites Ehrenamt (z.B. Ehrenvorstand, Ehrenamtsinhaber)
+ * oder Ehrenmitglied ist (§ 1 Abs. 6 Beitragsordnung).
+ * Reguläre Vorstandsmitglieder (1./2. Vorstand, Schriftführerin, Kassier, Beisitzer etc.)
+ * sind NICHT beitragsfrei und zahlen den regulären Mitgliedsbeitrag.
  */
-export function isHonoraryBoard(member: Member): boolean {
-  const vorstand = (member.boardFunction || '').trim();
-  return vorstand.length > 0 && vorstand !== '0' && vorstand.toLowerCase() !== 'nein';
+export function isHonoraryMember(member: Member): boolean {
+  const fields = [
+    member.status,
+    member.boardFunction,
+    member.clubFunction,
+    member.otherFunction,
+  ];
+
+  const hasHonoraryRole = fields.some(f => {
+    if (!f) return false;
+    const lower = f.toLowerCase().trim();
+    return lower.includes('ehren') || lower === 'honorary';
+  });
+
+  if (hasHonoraryRole) return true;
+
+  if (member.comment) {
+    const commentLower = member.comment.toLowerCase().trim();
+    if (
+      commentLower.includes('ehrenmitglied') ||
+      commentLower.includes('ehrenvorstand') ||
+      commentLower.includes('ehrendirigent') ||
+      commentLower.includes('ehrenamtsinhaber') ||
+      commentLower.includes('ehrenvorsitz')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
+
+/** Abwärtskompatibler Alias */
+export const isHonoraryBoard = isHonoraryMember;
 
 /**
  * Parst die Roh-CSV und überführt die Zeilen in ein typisiertes Format.
@@ -340,7 +373,7 @@ export function processContributions(members: Member[]): ContributionResult {
       let reason = '';
 
       const isResignedOrDeceased = m.status === 'resigned' || m.status === 'deceased';
-      const isHonorary = isHonoraryBoard(m);
+      const isHonorary = isHonoraryMember(m);
       const isChildByAge = m.age !== null && m.age < 18;
       const isChildByStatus = m.status === 'child';
       const isUnder18 = isChildByAge || isChildByStatus;
@@ -355,7 +388,7 @@ export function processContributions(members: Member[]): ContributionResult {
         } else {
           if (isHonorary) {
             fee = 0;
-            reason = 'Beitragsfrei gem. § 1 Abs. 6 (Vorstand)';
+            reason = 'Beitragsfrei gem. § 1 Abs. 6 (Ehrenvorstand / Ehrenmitglied)';
           } else if (isUnder18) {
             fee = 0;
             reason = 'Jugendlicher unter 18 beitragsfrei';
@@ -371,7 +404,10 @@ export function processContributions(members: Member[]): ContributionResult {
           }
         }
       } else {
-        if (isUnder18) {
+        if (isHonorary) {
+          fee = 0;
+          reason = 'Beitragsfrei gem. § 1 Abs. 6 (Ehrenvorstand / Ehrenmitglied)';
+        } else if (isUnder18) {
           fee = 0;
           reason = 'Kind/Jugendlicher unter 18 beitragsfrei';
         } else if (m.partner === payer.id || payer.partner === m.id) {
@@ -382,9 +418,6 @@ export function processContributions(members: Member[]): ContributionResult {
             fee = 0.0;
             reason = 'Passiver Lebenspartner (im Familienbeitrag abgedeckt)';
           }
-        } else if (isHonorary) {
-          fee = 0;
-          reason = 'Beitragsfrei gem. § 1 Abs. 6 (Vorstand/Ehrenamt)';
         } else if (m.age !== null && m.age < 25) {
           if (m.status === 'active') {
             activeChildrenCount++;

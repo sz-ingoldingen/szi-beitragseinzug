@@ -112,19 +112,24 @@ Folgende Spalten sind im Mitglieder-Export vorhanden:
 ## 5. Beitragsberechnung im Detail
 
 ### Bestätigte Referenz-Fälle:
-- **Gruppe 1 (Mustermann) $\rightarrow$ 30,00 €:**
+- **Gruppe 1 (Mustermann) $\rightarrow$ 40,00 €:**
   - Max (Zahler, aktiv): **20,00 €** (Familienbeitrag als Zahler)
   - Musterfrau (Partnerin, aktiv): **10,00 €** (Aktive Partnerin)
-  - Kind 1 (aktiv, 24 J., Vorstand/Schriftführerin): **0,00 €** (beitragsfrei gem. § 1 Abs. 6 Beitragsordnung)
+  - Kind 1 (aktiv, 24 J., Schriftführerin): **10,00 €** (reguläre Vorstandschaft ist nicht beitragsfrei $\rightarrow$ 1. aktives Kind unter 25 Jahren)
   - Kind 2 (Status `child`, 16 J.): **0,00 €** (unter 18 Jahren beitragsfrei)
-  - *Summe:* **30,00 €**
+  - *Summe:* **40,00 €**
 
 - **Gruppe 2 (Mustername) $\rightarrow$ 30,00 €:**
   - Mann (Zahler, passiv): **20,00 €** (Familienbeitrag als Zahler)
-  - Frau (Partnerin, aktiv, Beisitzerin): **10,00 €** (Aktive Partnerin)
+  - Frau (Partnerin, aktiv, Beisitzerin): **10,00 €** (reguläre Vorstandschaft ist nicht beitragsfrei $\rightarrow$ Aktive Partnerin)
   - Kind 2 (passiv, 21 J., Kind < 25 J.): **0,00 €** (im Familienbeitrag enthalten)
   - Kind 1 (Status `resigned`): **0,00 €** (Ausgetreten, kein Einzug)
   - *Summe:* **30,00 €**
+
+- **Einzelzahler-Referenzen (Ehrenamt vs. regulärer Vorstand):**
+  - Markus Weber (aktiv, `1. Vorstand`): **25,00 €** (regulärer Vorstand zahlt normalen Beitrag)
+  - Anton Albrecht (aktiv, `Ehrenvorstand`): **0,00 €** (beitragsfrei gem. § 1 Abs. 6)
+  - Josef Maier (passiv, `Ehrenmitglied`): **0,00 €** (beitragsfrei gem. § 1 Abs. 6)
 
 ### Berechnungsregeln zusammengefasst:
 1. **Einzelzahler (keine Familie/Gruppe):**
@@ -135,11 +140,12 @@ Folgende Spalten sind im Mitglieder-Export vorhanden:
 2. **Familienverband (mehrere Personen):**
    - Sockelbeitrag Hauptzahler: **20,00 €** (unabhängig ob Zahler aktiv oder passiv ist)
    - Aktiver Partner: **+10,00 €**
-   - 1. aktives Kind (< 25 Jahre): **+10,00 €** (sofern nicht durch Ehrenamt beitragsfrei)
+   - 1. aktives Kind (< 25 Jahre): **+10,00 €** (sofern nicht durch Ehrenmitgliedschaft beitragsfrei)
    - Ab 2. aktivem Kind (< 25 Jahre): **0,00 €**
    - Passive Kinder (< 25 Jahre) & alle Kinder < 18 Jahre: **0,00 €**
-3. **Ehrenamt / Vorstandsamt (§ 1 Abs. 6):**
-   - Personen mit Vorstandstätigkeit (z.B. Schriftführerin, Beisitzer etc.) sind für ihren individuellen Beitrag beitragsfrei (**0,00 €**).
+3. **Ehrenamt & Ehrenmitglieder (§ 1 Abs. 6):**
+   - Nur Träger echter Ehrenämter (z. B. "Ehrenvorstand", "Ehrenmitglied", "Ehrendirigent", "Ehrenamtsinhaber") sind für ihren individuellen Beitrag beitragsfrei (**0,00 €**).
+   - Reguläre Vorstandsmitglieder (z. B. 1./2. Vorstand, Schriftführerin, Kassierer, Beisitzer) sind **nicht** beitragsfrei und zahlen ihren normalen Beitrag.
 4. **Mindesteinzug:**
    - Beträge von **0,00 €** werden nicht in die finale SEPA-CSV exportiert.
 
