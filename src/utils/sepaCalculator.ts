@@ -422,6 +422,10 @@ export function processContributions(members: Member[]): ContributionResult {
     const hasFamilyFlag = groupMembers.some(m => m.famPayerFlag === '1' || m.famMemberFlag === '1');
     const isFamily = isMultiMember || hasFamilyFlag;
 
+    // Prüfen, ob der Zahler als Familienzahler geführt wird, aber keine weiteren aktiven Angehörigen mehr hat
+    const otherLivingMembers = groupMembers.filter(m => m.id !== payer.id && !isInactiveMember(m));
+    const isSingleFamilyPayer = hasFamilyFlag && otherLivingMembers.length === 0;
+
     // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
     // Sie werden nicht in die aktiven Lastschriften aufgenommen
     const allMembersInactive = groupMembers.every(isInactiveMember);
@@ -445,6 +449,12 @@ export function processContributions(members: Member[]): ContributionResult {
     if (!payer.signatureDate) {
       warnings.push('Unterschriftsdatum des Mandats fehlt.');
     }
+    if (isSingleFamilyPayer) {
+      const regularFee = payer.status === 'active' ? '25,00 € (aktiv)' : '12,00 € (passiv)';
+      warnings.push(
+        `Alleinstehender Familienzahler: Keine weiteren Familienangehörigen zugeordnet. Umstellung auf regulären Einzelbeitrag (${regularFee}) und neue Mitgliedschaft erforderlich.`
+      );
+    }
 
     groupMembers.forEach(m => {
       const isPayerSelf = m.id === payer.id;
@@ -462,7 +472,9 @@ export function processContributions(members: Member[]): ContributionResult {
       } else if (isPayerSelf) {
         if (isFamily) {
           fee = 20.0;
-          reason = 'Familienbeitrag (Zahler)';
+          reason = isSingleFamilyPayer
+            ? 'Familienbeitrag (Zahler) – Hinweis: Keine weiteren Familienangehörigen zugeordnet (Umstellung auf Einzelbeitrag nötig)'
+            : 'Familienbeitrag (Zahler)';
         } else {
           if (isHonorary) {
             fee = 0;

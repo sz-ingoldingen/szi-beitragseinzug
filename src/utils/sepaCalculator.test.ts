@@ -884,4 +884,161 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(auditCsv).not.toContain('FEHLER: Kein Zahler');
     });
   });
+
+  describe('Alleinstehende Familienzahler (keine weiteren Angehörigen vorhanden)', () => {
+    const currentYear = new Date().getFullYear();
+
+    it('erzeugt Hinweis (Warnung) für aktiven Familienzahler ohne Angehörige (20 € berechnet, Umstellung auf 25 € nötig)', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '2001',
+          firstName: 'Allein',
+          lastName: 'Zahler',
+          fullName: 'Allein Zahler',
+          status: 'active',
+          birthDate: '01.01.1980',
+          age: currentYear - 1980,
+          accountHolder: 'Zahler, Allein',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-SINGLE-FAM',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.memberCount).toBe(1);
+      expect(group.totalAmount).toBe(20.0); // Aktuell 20 €
+      expect(group.members[0].reason).toContain('Hinweis: Keine weiteren Familienangehörigen zugeordnet');
+
+      // Warnung vorhanden
+      expect(group.warnings.length).toBeGreaterThan(0);
+      const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
+      expect(singleWarning).toBeDefined();
+      expect(singleWarning).toContain('25,00 € (aktiv)');
+      expect(singleWarning).toContain('neue Mitgliedschaft erforderlich');
+    });
+
+    it('erzeugt Hinweis (Warnung) für passiven Familienzahler ohne Angehörige (20 € berechnet, Umstellung auf 12 € nötig)', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '2002',
+          firstName: 'Passiv',
+          lastName: 'Allein',
+          fullName: 'Passiv Allein',
+          status: 'passive',
+          birthDate: '01.01.1975',
+          age: currentYear - 1975,
+          accountHolder: 'Allein, Passiv',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-SINGLE-FAM2',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+      const group = result.payerGroups[0];
+      expect(group.totalAmount).toBe(20.0);
+
+      const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
+      expect(singleWarning).toBeDefined();
+      expect(singleWarning).toContain('12,00 € (passiv)');
+    });
+
+    it('erzeugt Hinweis, wenn einzige Partnerin verstorben oder ausgetreten ist', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '2003',
+          firstName: 'Witwer',
+          lastName: 'Zahler',
+          fullName: 'Witwer Zahler',
+          status: 'active',
+          birthDate: '01.01.1960',
+          age: currentYear - 1960,
+          accountHolder: 'Zahler, Witwer',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-WITWER',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '2004',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '2004',
+          firstName: 'Verstorbene',
+          lastName: 'Zahler',
+          fullName: 'Verstorbene Zahler',
+          status: 'deceased',
+          birthDate: '01.01.1962',
+          age: currentYear - 1962,
+          accountHolder: 'Zahler, Witwer',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '0',
+          parent2: '0',
+          partner: '2003',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: 'Verstorben',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+      const group = result.payerGroups[0];
+
+      // Zahler ist die einzige lebende Person in der Gruppe -> Warnung wird erzeugt
+      const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
+      expect(singleWarning).toBeDefined();
+    });
+  });
 });
