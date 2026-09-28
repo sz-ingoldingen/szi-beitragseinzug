@@ -3,3 +3,4 @@ dist
 .system_generated
 *.local
 .DS_Store
+.env*

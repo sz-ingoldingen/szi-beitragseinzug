@@ -176,7 +176,7 @@ export default function App(): React.JSX.Element {
           <div className="flex items-center space-x-3.5">
             <div className="shrink-0">
               <img
-                src="/szi_wappen.png"
+                src={`${import.meta.env.BASE_URL}szi_wappen.png`}
                 alt="Schalmeienzug Ingoldingen e.V. Wappen"
                 className="w-12 h-14 object-contain rounded-xl shadow-md border border-[#AC8AD7]/30"
               />
@@ -213,7 +213,7 @@ export default function App(): React.JSX.Element {
           <div className="bg-white rounded-2xl shadow-sm border border-[#DFD0F2] p-8 sm:p-12 text-center max-w-2xl mx-auto my-8">
             <div className="w-28 h-32 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg overflow-hidden border border-[#DFD0F2] bg-[#1c1a1b] p-1">
               <img
-                src="/szi_wappen.png"
+                src={`${import.meta.env.BASE_URL}szi_wappen.png`}
                 alt="SZI Wappen"
                 className="w-full h-full object-contain rounded-xl drop-shadow"
               />
