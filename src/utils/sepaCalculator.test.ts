@@ -134,4 +134,283 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(g?.members[0].reason).toContain('§ 1 Abs. 6');
     });
   });
+
+  describe('Altersgrenze: Kind wird 25 Jahre alt (§ 2 Beitragsordnung)', () => {
+    const currentYear = new Date().getFullYear();
+
+    it('Test 1: Kind ist 25+, hat KEINE eigene IBAN, aber Elternteil ist als Zahler eingetragen', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '1001',
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          fullName: 'Max Mustermann',
+          status: 'active',
+          birthDate: '01.01.1970',
+          age: currentYear - 1970,
+          accountHolder: 'Mustermann, Max',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-01',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '1002',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '1002',
+          firstName: 'Musterfrau',
+          lastName: 'Mustermann',
+          fullName: 'Musterfrau Mustermann',
+          status: 'active',
+          birthDate: '01.01.1972',
+          age: currentYear - 1972,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '0',
+          parent2: '0',
+          partner: '1001',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 4,
+          id: '1003',
+          firstName: 'Kind',
+          lastName: 'Mustermann',
+          fullName: 'Kind Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 25}`,
+          age: 25,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+
+      // 1. Kind wird weiterhin der Gruppe des Vaters zugeordnet
+      expect(result.unassignedMembers.length).toBe(0);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.payerId).toBe('1001');
+      expect(group.memberCount).toBe(3);
+
+      // 2. Kind fällt aus der Kinderregelung heraus und wird als Erwachsener aktiv (25 €) veranlagt
+      const kind = group.members.find(m => m.id === '1003');
+      expect(kind?.fee).toBe(25.0);
+      expect(kind?.reason).toBe('Erwachsenes Mitglied aktiv (25 €)');
+
+      // 3. Dem Familienzahler werden 20 € (Basis) + 10 € (Partner) + 25 € (Kind >= 25) = 55 € belastet
+      expect(group.totalAmount).toBe(55.0);
+    });
+
+    it('Test 2: Kind ist 25+, hat eine EIGENE IBAN / Mandat eingetragen (Eltern stehen noch als parent1/2 drin)', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '1001',
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          fullName: 'Max Mustermann',
+          status: 'active',
+          birthDate: '01.01.1970',
+          age: currentYear - 1970,
+          accountHolder: 'Mustermann, Max',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-01',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '1002',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '1002',
+          firstName: 'Musterfrau',
+          lastName: 'Mustermann',
+          fullName: 'Musterfrau Mustermann',
+          status: 'active',
+          birthDate: '01.01.1972',
+          age: currentYear - 1972,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '0',
+          parent2: '0',
+          partner: '1001',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 4,
+          id: '1003',
+          firstName: 'Kind',
+          lastName: 'Mustermann',
+          fullName: 'Kind Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 25}`,
+          age: 25,
+          accountHolder: 'Kind Mustermann',
+          iban: 'DE50100000000000000001', // Eigene gültige IBAN
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-03', // Eigenes Mandat
+          signatureDate: '01.01.2026',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+
+      // 1. Es entstehen ZWEI getrennte Zahlergruppen
+      expect(result.unassignedMembers.length).toBe(0);
+      expect(result.payerGroups.length).toBe(2);
+
+      const elternGruppe = result.payerGroups.find(g => g.payerId === '1001');
+      expect(elternGruppe).toBeDefined();
+      expect(elternGruppe?.memberCount).toBe(2);
+      expect(elternGruppe?.totalAmount).toBe(30.0); // 20 € + 10 €
+
+      const kindGruppe = result.payerGroups.find(g => g.payerId === '1003');
+      expect(kindGruppe).toBeDefined();
+      expect(kindGruppe?.memberCount).toBe(1);
+      expect(kindGruppe?.totalAmount).toBe(25.0); // 25 € über eigenes Konto
+      expect(kindGruppe?.members[0].reason).toBe('Erwachsener aktiv (25 €)');
+    });
+
+    it('Test 3: Passives Kind wird 25+ (ohne eigene IBAN) -> zahlt 12 € als passiver Erwachsener über Familienzahler', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '1001',
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          fullName: 'Max Mustermann',
+          status: 'passive',
+          birthDate: '01.01.1970',
+          age: currentYear - 1970,
+          accountHolder: 'Mustermann, Max',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-01',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '1003',
+          firstName: 'Kind',
+          lastName: 'Mustermann',
+          fullName: 'Kind Mustermann',
+          status: 'passive',
+          birthDate: `01.01.${currentYear - 26}`,
+          age: 26,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+      const group = result.payerGroups[0];
+
+      // Zahler 20 € (Familienbeitrag Zahler) + passives Kind >= 25 (12 €) = 32 €
+      const kind = group.members.find(m => m.id === '1003');
+      expect(kind?.fee).toBe(12.0);
+      expect(kind?.reason).toBe('Erwachsenes Mitglied passiv (12 €)');
+      expect(group.totalAmount).toBe(32.0);
+    });
+  });
 });
