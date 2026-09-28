@@ -453,9 +453,8 @@ export function processContributions(members: Member[]): ContributionResult {
 
       const isResignedOrDeceased = isInactiveMember(m);
       const isHonorary = isHonoraryMember(m);
-      const isChildByAge = m.age !== null && m.age < 18;
       const isChildByStatus = m.status === 'child';
-      const isUnder18 = isChildByAge || isChildByStatus;
+      const isUnder18 = m.age !== null ? m.age < 18 : isChildByStatus;
 
       if (isResignedOrDeceased) {
         fee = 0;

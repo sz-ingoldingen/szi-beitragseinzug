@@ -421,6 +421,406 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(group.members.find(m => m.id === '1003')).toBeUndefined();
       expect(group.totalAmount).toBe(20.0);
     });
+
+    it('Test 4: Familie mit 2 Kindern (Kind 1 wird 25, Kind 2 ist U18 z. B. 16 J., aktiv) -> Kind 2 bleibt beitragsfrei (0 €)', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '1001',
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          fullName: 'Max Mustermann',
+          status: 'active',
+          birthDate: '01.01.1970',
+          age: currentYear - 1970,
+          accountHolder: 'Mustermann, Max',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-01',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '1002',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '1002',
+          firstName: 'Musterfrau',
+          lastName: 'Mustermann',
+          fullName: 'Musterfrau Mustermann',
+          status: 'active',
+          birthDate: '01.01.1972',
+          age: currentYear - 1972,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '0',
+          parent2: '0',
+          partner: '1001',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 4,
+          id: '1003',
+          firstName: 'Kind1',
+          lastName: 'Mustermann',
+          fullName: 'Kind1 Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 25}`,
+          age: 25,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 5,
+          id: '1004',
+          firstName: 'Kind2',
+          lastName: 'Mustermann',
+          fullName: 'Kind2 Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 16}`,
+          age: 16,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+
+      // 1. Kind 1 (25 Jahre) fällt heraus -> unassigned error
+      expect(result.unassignedMembers.length).toBe(1);
+      expect(result.unassignedMembers[0].id).toBe('1003');
+
+      // 2. Familie umfasst Vater (20 €), Mutter (10 €) und Kind 2
+      expect(result.payerGroups.length).toBe(1);
+      const group = result.payerGroups[0];
+      expect(group.memberCount).toBe(3);
+
+      const kind2 = group.members.find(m => m.id === '1004');
+      expect(kind2).toBeDefined();
+      expect(kind2?.fee).toBe(0.0);
+      expect(kind2?.reason).toBe('Kind/Jugendlicher unter 18 beitragsfrei');
+
+      // Gesamt: 20 € (Vater) + 10 € (Mutter) + 0 € (Kind 2 U18) = 30 €
+      expect(group.totalAmount).toBe(30.0);
+    });
+
+    it('Test 5: Familie mit 2 Kindern (Kind 1 wird 25, Kind 2 ist Ü18 z. B. 20 J., aktiv) -> Kind 2 rückt nach und zahlt 10 €', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '1001',
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          fullName: 'Max Mustermann',
+          status: 'active',
+          birthDate: '01.01.1970',
+          age: currentYear - 1970,
+          accountHolder: 'Mustermann, Max',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-01',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '1002',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '1002',
+          firstName: 'Musterfrau',
+          lastName: 'Mustermann',
+          fullName: 'Musterfrau Mustermann',
+          status: 'active',
+          birthDate: '01.01.1972',
+          age: currentYear - 1972,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '0',
+          parent2: '0',
+          partner: '1001',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 4,
+          id: '1003',
+          firstName: 'Kind1',
+          lastName: 'Mustermann',
+          fullName: 'Kind1 Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 25}`,
+          age: 25,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 5,
+          id: '1004',
+          firstName: 'Kind2',
+          lastName: 'Mustermann',
+          fullName: 'Kind2 Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 20}`,
+          age: 20,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+
+      // 1. Kind 1 (25 Jahre) fällt heraus -> unassigned error
+      expect(result.unassignedMembers.length).toBe(1);
+      expect(result.unassignedMembers[0].id).toBe('1003');
+
+      // 2. Familie umfasst Vater (20 €), Mutter (10 €) und Kind 2
+      expect(result.payerGroups.length).toBe(1);
+      const group = result.payerGroups[0];
+      expect(group.memberCount).toBe(3);
+
+      const kind2 = group.members.find(m => m.id === '1004');
+      expect(kind2).toBeDefined();
+      // Kind 2 ist faktisch das einzige Kind im Familienbeitrag und als aktives Kind Ü18 nun das 1. aktive Kind -> 10 €
+      expect(kind2?.fee).toBe(10.0);
+      expect(kind2?.reason).toBe('1. aktives Kind unter 25 Jahren (+10 €)');
+
+      // Gesamt: 20 € (Vater) + 10 € (Mutter) + 10 € (Kind 2 Ü18 aktiv) = 40 €
+      expect(group.totalAmount).toBe(40.0);
+    });
+
+    it('Test 6 (Vergleich): Beide Kinder unter 25 (Kind 1 ist 24 J. aktiv, Kind 2 ist 20 J. aktiv) -> Kind 1 zahlt 10 €, Kind 2 zahlt 0 €', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '1001',
+          firstName: 'Max',
+          lastName: 'Mustermann',
+          fullName: 'Max Mustermann',
+          status: 'active',
+          birthDate: '01.01.1970',
+          age: currentYear - 1970,
+          accountHolder: 'Mustermann, Max',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-01',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '1002',
+          famPayerFlag: '1',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '1002',
+          firstName: 'Musterfrau',
+          lastName: 'Mustermann',
+          fullName: 'Musterfrau Mustermann',
+          status: 'active',
+          birthDate: '01.01.1972',
+          age: currentYear - 1972,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '0',
+          parent2: '0',
+          partner: '1001',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 4,
+          id: '1003',
+          firstName: 'Kind1',
+          lastName: 'Mustermann',
+          fullName: 'Kind1 Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 24}`,
+          age: 24,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 5,
+          id: '1004',
+          firstName: 'Kind2',
+          lastName: 'Mustermann',
+          fullName: 'Kind2 Mustermann',
+          status: 'active',
+          birthDate: `01.01.${currentYear - 20}`,
+          age: 20,
+          accountHolder: 'Mustermann, Max',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '1001',
+          parent2: '1002',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '1',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+
+      // Beide Kinder < 25 -> kein Klärungsfall
+      expect(result.unassignedMembers.length).toBe(0);
+
+      const group = result.payerGroups[0];
+      expect(group.memberCount).toBe(4);
+
+      const kind1 = group.members.find(m => m.id === '1003');
+      const kind2 = group.members.find(m => m.id === '1004');
+
+      // Kind 1 ist 1. aktives Kind -> 10 €
+      expect(kind1?.fee).toBe(10.0);
+      expect(kind1?.reason).toBe('1. aktives Kind unter 25 Jahren (+10 €)');
+
+      // Kind 2 ist 2. aktives Kind -> beitragsfrei (0 €)
+      expect(kind2?.fee).toBe(0.0);
+      expect(kind2?.reason).toBe('2. aktives Kind unter 25 (beitragsfrei)');
+
+      // Gesamt: 20 € (Vater) + 10 € (Mutter) + 10 € (Kind 1) + 0 € (Kind 2) = 40 €
+      expect(group.totalAmount).toBe(40.0);
+    });
   });
 
   describe('Gekündigte & verstorbene Mitglieder (Info ohne Warnung, kein Einzug)', () => {
