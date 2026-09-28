@@ -1,0 +1,4 @@
+- csv Upload für Mitliederinformationen
+- Verarbeitung und bildung der Zahlergruppen + Beträge
+- Erzeugen einer SEPA xml datei zum Upload bei der Bank
+- Download der SEPA csv Datei für die Bank

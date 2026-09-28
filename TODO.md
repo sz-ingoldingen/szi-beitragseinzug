@@ -1,0 +1,2 @@
+- was passiert wenn plötzlich ein Kind rausfällt? Wie kann das visualisiert werden, dasse eine Bankverbinund fehlt? Mandat
+- retired status separat?
