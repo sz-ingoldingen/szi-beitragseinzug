@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   isHonoraryMember,
+  isResigned,
+  isDeceased,
+  isInactiveMember,
   parseMembersCSV,
   processContributions,
+  generateAuditCsv,
   Member,
 } from './sepaCalculator';
 import { SAMPLE_CSV } from './sampleData';
@@ -411,6 +415,68 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(kind?.fee).toBe(12.0);
       expect(kind?.reason).toBe('Erwachsenes Mitglied passiv (12 €)');
       expect(group.totalAmount).toBe(32.0);
+    });
+  });
+
+  describe('Gekündigte & verstorbene Mitglieder (Info ohne Warnung, kein Einzug)', () => {
+    it('erkennt Ausgetretene / Gekündigte über Status und Spalte 6 korrekt', () => {
+      expect(isResigned(createMember({ status: 'resigned' }))).toBe(true);
+      expect(isResigned(createMember({ status: 'ausgetreten' }))).toBe(true);
+      expect(isResigned(createMember({ status: 'gekündigt' }))).toBe(true);
+      expect(isResigned(createMember({ status: 'gekuendigt' }))).toBe(true);
+      expect(isResigned(createMember({ status: 'active', raw: ['', '', '', '', '', '2023'] }))).toBe(true);
+      expect(isResigned(createMember({ status: 'active', raw: ['', '', '', '', '', '0'] }))).toBe(false);
+      expect(isResigned(createMember({ status: 'active' }))).toBe(false);
+    });
+
+    it('erkennt Verstorbene über Status und Kommentar korrekt', () => {
+      expect(isDeceased(createMember({ status: 'deceased' }))).toBe(true);
+      expect(isDeceased(createMember({ status: 'verstorben' }))).toBe(true);
+      expect(isDeceased(createMember({ status: 'active', comment: 'Im Januar verstorben' }))).toBe(true);
+      expect(isDeceased(createMember({ status: 'active', comment: 'Reguläres Mitglied' }))).toBe(false);
+    });
+
+    it('isInactiveMember bündelt Gekündigte und Verstorbene', () => {
+      expect(isInactiveMember(createMember({ status: 'resigned' }))).toBe(true);
+      expect(isInactiveMember(createMember({ status: 'verstorben' }))).toBe(true);
+      expect(isInactiveMember(createMember({ status: 'active' }))).toBe(false);
+    });
+
+    it('behandelt inaktive Mitglieder in SAMPLE_CSV als reine Info (0 €) ohne Warnung', () => {
+      const members = parseMembersCSV(SAMPLE_CSV);
+      const result = processContributions(members);
+
+      // 1. Gekündigte & verstorbene Personen werden in inactiveMembers gesammelt
+      expect(result.inactiveMembers.length).toBe(2);
+      const resignedMember = result.inactiveMembers.find(m => m.id === '10342');
+      const deceasedMember = result.inactiveMembers.find(m => m.id === '10506');
+
+      expect(resignedMember).toBeDefined();
+      expect(resignedMember?.inactiveType).toBe('resigned');
+      expect(resignedMember?.reasonText).toContain('Ausgetreten');
+
+      expect(deceasedMember).toBeDefined();
+      expect(deceasedMember?.inactiveType).toBe('deceased');
+      expect(deceasedMember?.reasonText).toContain('Verstorben');
+
+      // 2. Inaktive Mitglieder landen NICHT in unassignedMembers (keine Warnung/Fehler)
+      expect(result.unassignedMembers.length).toBe(0);
+
+      // 3. Reines inaktives Mitglied (10506) erzeugt keine leere 0 € Zahlergruppe
+      const deceasedGroup = result.payerGroups.find(g => g.payerId === '10506');
+      expect(deceasedGroup).toBeUndefined();
+
+      // 4. Inaktives Mitglied in einer Familie (10342 bei Mustername) wird mit 0 € geführt
+      const g2 = result.payerGroups.find(g => g.payerId === '10195');
+      const kind1InGroup = g2?.members.find(m => m.id === '10342');
+      expect(kind1InGroup?.fee).toBe(0.0);
+      expect(kind1InGroup?.reason).toContain('Ausgetreten');
+
+      // 5. Prüfbericht (Audit-CSV) führt inaktive Mitglieder mit INFO und 0,00 €
+      const auditCsv = generateAuditCsv(result.payerGroups, result.unassignedMembers, result.inactiveMembers);
+      expect(auditCsv).toContain('INFO: Ausgetreten seit 2022');
+      expect(auditCsv).toContain('INFO: Verstorben (kein Beitragseinzug)');
+      expect(auditCsv).not.toContain('FEHLER: Kein Zahler');
     });
   });
 });

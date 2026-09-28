@@ -54,9 +54,15 @@ export interface UnassignedMember extends Member {
   issue: string;
 }
 
+export interface InactiveMember extends Member {
+  inactiveType: 'resigned' | 'deceased';
+  reasonText: string;
+}
+
 export interface ContributionResult {
   payerGroups: PayerGroup[];
   unassignedMembers: UnassignedMember[];
+  inactiveMembers: InactiveMember[];
 }
 
 /**
@@ -175,6 +181,39 @@ export function isHonoraryMember(member: Member): boolean {
 
 /** Abwärtskompatibler Alias */
 export const isHonoraryBoard = isHonoraryMember;
+
+/**
+ * Prüft, ob ein Mitglied ausgetreten / gekündigt ist.
+ */
+export function isResigned(member: Member): boolean {
+  const status = (member.status || '').toLowerCase().trim();
+  const resignedImport = member.raw && member.raw[5] ? member.raw[5].trim() : '';
+  const hasResignedDate = resignedImport.length > 0 && resignedImport !== '0';
+  return (
+    status === 'resigned' ||
+    status === 'ausgetreten' ||
+    status === 'gekündigt' ||
+    status === 'gekuendigt' ||
+    status === 'retired' ||
+    hasResignedDate
+  );
+}
+
+/**
+ * Prüft, ob ein Mitglied verstorben ist.
+ */
+export function isDeceased(member: Member): boolean {
+  const status = (member.status || '').toLowerCase().trim();
+  const comment = (member.comment || '').toLowerCase().trim();
+  return status === 'deceased' || status === 'verstorben' || comment.includes('verstorben');
+}
+
+/**
+ * Prüft, ob ein Mitglied inaktiv ist (gekündigt/ausgetreten oder verstorben).
+ */
+export function isInactiveMember(member: Member): boolean {
+  return isResigned(member) || isDeceased(member);
+}
 
 /**
  * Parst die Roh-CSV und überführt die Zeilen in ein typisiertes Format.
@@ -297,6 +336,22 @@ export function processContributions(members: Member[]): ContributionResult {
   });
 
   const unassignedMembers: Member[] = [];
+  const inactiveMembers: InactiveMember[] = [];
+
+  // Alle gekündigten und verstorbenen Mitglieder erfassen
+  members.forEach(m => {
+    if (isInactiveMember(m)) {
+      inactiveMembers.push({
+        ...m,
+        inactiveType: isDeceased(m) ? 'deceased' : 'resigned',
+        reasonText: isDeceased(m)
+          ? 'Verstorben (kein Beitragseinzug)'
+          : (m.raw && m.raw[5] && m.raw[5] !== '0'
+              ? `Ausgetreten seit ${m.raw[5]} (kein Beitragseinzug)`
+              : 'Gekündigt / Ausgetreten (kein Beitragseinzug)'),
+      });
+    }
+  });
 
   nonPayers.forEach(m => {
     let matchedPayerId: string | null = null;
@@ -337,7 +392,10 @@ export function processContributions(members: Member[]): ContributionResult {
       group.members.push(m);
       group.assignedMemberIds.add(m.id);
     } else {
-      unassignedMembers.push(m);
+      // Gekündigte/verstorbene Mitglieder ohne Zahler sind KEIN Fehler/Problem, sondern regulär inaktiv!
+      if (!isInactiveMember(m)) {
+        unassignedMembers.push(m);
+      }
     }
   });
 
@@ -349,6 +407,13 @@ export function processContributions(members: Member[]): ContributionResult {
     const isMultiMember = groupMembers.length > 1;
     const hasFamilyFlag = groupMembers.some(m => m.famPayerFlag === '1' || m.famMemberFlag === '1');
     const isFamily = isMultiMember || hasFamilyFlag;
+
+    // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
+    // Sie werden nicht in die aktiven Lastschriften aufgenommen
+    const allMembersInactive = groupMembers.every(isInactiveMember);
+    if (allMembersInactive) {
+      return;
+    }
 
     let activeChildrenCount = 0;
     let totalAmount = 0;
@@ -372,7 +437,7 @@ export function processContributions(members: Member[]): ContributionResult {
       let fee = 0;
       let reason = '';
 
-      const isResignedOrDeceased = m.status === 'resigned' || m.status === 'deceased';
+      const isResignedOrDeceased = isInactiveMember(m);
       const isHonorary = isHonoraryMember(m);
       const isChildByAge = m.age !== null && m.age < 18;
       const isChildByStatus = m.status === 'child';
@@ -380,7 +445,7 @@ export function processContributions(members: Member[]): ContributionResult {
 
       if (isResignedOrDeceased) {
         fee = 0;
-        reason = m.status === 'resigned' ? 'Ausgetreten (0 €)' : 'Verstorben (0 €)';
+        reason = isDeceased(m) ? 'Verstorben (0 €)' : 'Ausgetreten / Gekündigt (0 €)';
       } else if (isPayerSelf) {
         if (isFamily) {
           fee = 20.0;
@@ -475,6 +540,7 @@ export function processContributions(members: Member[]): ContributionResult {
       ...m,
       issue: 'Kein Zahler mit gültiger IBAN/Mandat zugeordnet.',
     })),
+    inactiveMembers,
   };
 }
 
@@ -515,7 +581,11 @@ export function generateSepaCsv(payerGroups: PayerGroup[], purpose = 'Mitgliedsb
 /**
  * Erzeugt den detaillierten Prüfbericht für den Kassierer.
  */
-export function generateAuditCsv(payerGroups: PayerGroup[], unassignedMembers: UnassignedMember[]): string {
+export function generateAuditCsv(
+  payerGroups: PayerGroup[],
+  unassignedMembers: UnassignedMember[],
+  inactiveMembers: InactiveMember[] = []
+): string {
   const headers = [
     'Mitgliedsnummer',
     'Name',
@@ -561,6 +631,22 @@ export function generateAuditCsv(payerGroups: PayerGroup[], unassignedMembers: U
       '',
       '0,00',
       `FEHLER: ${m.issue}`,
+      m.boardFunction || m.otherFunction || '',
+      m.maskGroup || '',
+    ]);
+  });
+
+  inactiveMembers.forEach(m => {
+    rows.push([
+      m.id,
+      m.fullName,
+      m.status,
+      m.age ?? '',
+      m.birthDate,
+      m.inactiveType === 'deceased' ? 'VERSTORBEN' : 'AUSGETRETEN / GEKÜNDIGT',
+      '',
+      '0,00',
+      `INFO: ${m.reasonText}`,
       m.boardFunction || m.otherFunction || '',
       m.maskGroup || '',
     ]);

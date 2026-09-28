@@ -5,11 +5,12 @@ export const SAMPLE_CSV = `Mitgliedsnummer;Reihenfolge;Eintrittsjahr (Import);Ak
 10402;460;2010;0;0;0;active;Mustermann-Musterfrau;Musterfrau;Musterstraße 1;88456 Ingoldingen;01.01.1968;07355-000001;+49 151 00000004;musterfrau@example.com;;2010-07-29;;;;;Mustermann, Max;;;;01.01.2020;0;0;10401;0;0;Bariton;g1_13;;;0;0;0;0;0;;;;
 10185;359;1991;0;0;0;active;Mustername;Frau;Musterweg 2;88456 Ingoldingen;01.01.1970;;+49 151 00000005;frau.muster@example.org;;1991-11-14;;Beisitzerin;;Stimmleiter;Mustername, Mann;;;n.a.;;0;0;10195;0;0;Alt;g1_12;;;0;1;0;0;0;;;;Instrument Alt
 10195;358;1992;0;0;0;passive;Mustername;Mann;Musterweg 2;88456 Ingoldingen;01.01.1968;07355-000002;;mann.muster@example.org;;1992-05-08;;;;;Mustername, Mann;DE50100000000000000001;TESTDEDDXXX;MANDAT-SZI-002;01.01.2020;0;0;10185;0;0;;;;;1;0;0;0;0;;;;
-10342;360;2002;0;0;0;resigned;Mustername;Kind1;Musterweg 2;88456 Ingoldingen;01.01.1998;07355-000002;;;;2002-04-06;;;;;Mustername, Mann;;;n.a.;;0;0;0;0;0;;;;;0;0;0;0;0;;;;
+10342;360;2002;0;0;2022;resigned;Mustername;Kind1;Musterweg 2;88456 Ingoldingen;01.01.1998;07355-000002;;;;2002-04-06;;;;;Mustername, Mann;;;n.a.;;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 10370;357;2005;0;0;0;passive;Mustername;Kind2;Musterweg 2;88456 Ingoldingen;01.01.2004;07355-000002;;;;2005-03-24;;;;;Mustername, Mann;;;n.a.;;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 10501;501;2015;0;0;0;active;Huber;Hans;Beispielweg 3;88456 Ingoldingen;01.01.1985;07355-000003;;hans.huber@example.com;;2015-05-01;;;;;Huber, Hans;DE89370400440532013000;TESTDEDDXXX;MANDAT-SZI-003;01.05.2015;0;0;0;0;0;Akkord;g1_11;;;0;0;0;0;0;;;;
 10502;502;2018;0;0;0;passive;Schmidt;Peter;Beispielweg 4;88456 Ingoldingen;01.01.1970;;;peter.schmidt@example.com;;2018-01-15;;;;;Schmidt, Peter;DE23100000000000000002;TESTDEDDXXX;MANDAT-SZI-004;15.01.2018;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 10503;503;2016;0;0;0;active;Weber;Markus;Vorstandsweg 1;88456 Ingoldingen;01.01.1980;07355-000004;;markus.weber@example.com;;2016-01-01;;1. Vorstand;;;Weber, Markus;DE93100000000000000003;TESTDEDDXXX;MANDAT-SZI-005;01.01.2016;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 10504;504;1990;0;0;0;active;Albrecht;Anton;Ehrenweg 5;88456 Ingoldingen;01.01.1950;07355-000005;;anton.albrecht@example.com;;1990-01-01;;Ehrenvorstand;;;Albrecht, Anton;DE66100000000000000004;TESTDEDDXXX;MANDAT-SZI-006;01.01.1990;0;0;0;0;0;;;;;0;0;0;0;0;;;;
 10505;505;1985;0;0;0;passive;Maier;Josef;Ehrenweg 6;88456 Ingoldingen;01.01.1945;07355-000006;;josef.maier@example.com;;1985-01-01;;;Ehrenmitglied;;Maier, Josef;DE39100000000000000005;TESTDEDDXXX;MANDAT-SZI-007;01.01.1985;0;0;0;0;0;;;;;0;0;0;0;0;;;;
+10506;506;1980;0;0;0;deceased;Gedächtnis;Konrad;Friedhofstraße 1;88456 Ingoldingen;15.05.1930;;;;;1980-01-01;;;;;Gedächtnis, Konrad;;;;;0;0;0;0;0;;;;;0;0;0;0;0;;Verstorben 2024;;
 `;
