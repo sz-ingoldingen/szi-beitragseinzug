@@ -25,6 +25,7 @@ export interface Member {
   maskGroup: string;
   danceGroup: string;
   comment: string;
+  resignedDate?: string;
   raw: string[];
 }
 
@@ -187,14 +188,23 @@ export const isHonoraryBoard = isHonoraryMember;
  */
 export function isResigned(member: Member): boolean {
   const status = (member.status || '').toLowerCase().trim();
-  const resignedImport = member.raw && member.raw[5] ? member.raw[5].trim() : '';
-  const hasResignedDate = resignedImport.length > 0 && resignedImport !== '0';
+  const comment = (member.comment || '').toLowerCase().trim();
+  const resignedStr = (member.resignedDate || (member.raw && member.raw[5] ? member.raw[5].trim() : '')).trim();
+  const hasResignedDate = resignedStr.length > 0 && resignedStr !== '0';
+
   return (
-    status === 'resigned' ||
-    status === 'ausgetreten' ||
-    status === 'gekündigt' ||
-    status === 'gekuendigt' ||
-    status === 'retired' ||
+    status.includes('ausgetret') ||
+    status.includes('austritt') ||
+    status.includes('resigned') ||
+    status.includes('gekündigt') ||
+    status.includes('gekuendigt') ||
+    status.includes('inaktiv') ||
+    status.includes('retired') ||
+    status.includes('ehemalig') ||
+    comment.includes('ausgetret') ||
+    comment.includes('austritt') ||
+    comment.includes('gekündigt') ||
+    comment.includes('gekuendigt') ||
     hasResignedDate
   );
 }
@@ -275,6 +285,14 @@ export function parseMembersCSV(csvText: string): Member[] {
     const maskGroup = getCol(r, 'Maskengruppe', 31);
     const danceGroup = getCol(r, 'Tanzgruppe', 33);
     const comment = getCol(r, 'Kommentar', 41);
+    const resignedDate =
+      getCol(r, 'Ausgetreten seit (Import)') ||
+      getCol(r, 'Ausgetreten seit') ||
+      getCol(r, 'Austrittsdatum') ||
+      getCol(r, 'Ausgetreten am') ||
+      getCol(r, 'Kündigungsdatum') ||
+      getCol(r, 'Austritt') ||
+      (r[5] !== undefined ? r[5].trim() : '');
 
     return {
       rowIndex: rowIndex + 2,
@@ -301,6 +319,7 @@ export function parseMembersCSV(csvText: string): Member[] {
       maskGroup,
       danceGroup,
       comment,
+      resignedDate,
       raw: r,
     };
   });
@@ -422,9 +441,9 @@ export function processContributions(members: Member[]): ContributionResult {
     const hasFamilyFlag = groupMembers.some(m => m.famPayerFlag === '1' || m.famMemberFlag === '1');
     const isFamily = isMultiMember || hasFamilyFlag;
 
-    // Prüfen, ob der Zahler als Familienzahler geführt wird, aber keine weiteren aktiven Angehörigen mehr hat
+    // Prüfen, ob der Zahler als Familie abgerechnet wird (20 €), aber keine weiteren aktiven Angehörigen mehr hat
     const otherLivingMembers = groupMembers.filter(m => m.id !== payer.id && !isInactiveMember(m));
-    const isSingleFamilyPayer = hasFamilyFlag && otherLivingMembers.length === 0;
+    const isSingleFamilyPayer = isFamily && otherLivingMembers.length === 0;
 
     // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
     // Sie werden nicht in die aktiven Lastschriften aufgenommen
@@ -450,9 +469,16 @@ export function processContributions(members: Member[]): ContributionResult {
       warnings.push('Unterschriftsdatum des Mandats fehlt.');
     }
     if (isSingleFamilyPayer) {
-      const regularFee = payer.status === 'active' ? '25,00 € (aktiv)' : '12,00 € (passiv)';
+      let regularFee = '25,00 € (aktiv)';
+      if (payer.status === 'passive') {
+        regularFee = '12,00 € (passiv)';
+      } else if (payer.status === 'sponsor') {
+        regularFee = '12,00 € (passiv / Sponsor)';
+      } else if (payer.status !== 'active') {
+        regularFee = `12,00 € (${payer.status})`;
+      }
       warnings.push(
-        `Alleinstehender Familienzahler: Keine weiteren Familienangehörigen zugeordnet. Umstellung auf regulären Einzelbeitrag (${regularFee}) und neue Mitgliedschaft erforderlich.`
+        `Alleinstehender Familienzahler: Keine weiteren aktiven Familienangehörigen zugeordnet (z. B. Angehörige ausgetreten oder ≥ 25 Jahre). Umstellung auf regulären Einzelbeitrag (${regularFee}) und neue Mitgliedschaft erforderlich.`
       );
     }
 

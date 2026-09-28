@@ -1040,5 +1040,110 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
       expect(singleWarning).toBeDefined();
     });
+
+    it('erzeugt Hinweis (Warnung) für Sponsor/Payer, dessen Töchter ausgetreten sind (auch wenn famPayerFlag 0 ist)', () => {
+      const members: Member[] = [
+        {
+          rowIndex: 2,
+          id: '3001',
+          firstName: 'Sponsor',
+          lastName: 'Muster',
+          fullName: 'Sponsor Muster',
+          status: 'sponsor',
+          birthDate: '01.01.1965',
+          age: currentYear - 1965,
+          accountHolder: 'Muster, Sponsor',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-SPONSOR',
+          signatureDate: '01.01.2020',
+          parent1: '0',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '0', // WICHTIG: Flag ist 0, aber Töchter hängen an ihm dran
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 3,
+          id: '3002',
+          firstName: 'Tochter1',
+          lastName: 'Muster',
+          fullName: 'Tochter1 Muster',
+          status: 'ausgetreten',
+          birthDate: '01.01.2000',
+          age: currentYear - 2000,
+          accountHolder: 'Muster, Sponsor',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '3001',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+        {
+          rowIndex: 4,
+          id: '3003',
+          firstName: 'Tochter2',
+          lastName: 'Muster',
+          fullName: 'Tochter2 Muster',
+          status: 'resigned',
+          birthDate: '01.01.2003',
+          age: currentYear - 2003,
+          accountHolder: 'Muster, Sponsor',
+          iban: '',
+          bic: '',
+          sepaMandate: '',
+          signatureDate: '',
+          parent1: '3001',
+          parent2: '0',
+          partner: '0',
+          famPayerFlag: '0',
+          famMemberFlag: '0',
+          boardFunction: '',
+          clubFunction: '',
+          otherFunction: '',
+          maskGroup: '',
+          danceGroup: '',
+          comment: '',
+          raw: [],
+        },
+      ];
+
+      const result = processContributions(members);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      // Sponsor wurde als Familie gruppiert (3 Mitglieder, davon 2 ausgetreten) -> zahlt 20 €
+      expect(group.totalAmount).toBe(20.0);
+      expect(group.members[0].fee).toBe(20.0);
+      expect(group.members[0].reason).toContain('Hinweis: Keine weiteren Familienangehörigen zugeordnet');
+
+      // Töchter sind mit 0 € erfasst
+      expect(group.members[1].fee).toBe(0.0);
+      expect(group.members[2].fee).toBe(0.0);
+
+      // Warnung MUSS vorhanden sein
+      expect(group.warnings.length).toBeGreaterThan(0);
+      const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
+      expect(singleWarning).toBeDefined();
+      expect(singleWarning).toContain('passiv / Sponsor');
+    });
   });
 });
