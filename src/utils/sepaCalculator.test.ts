@@ -142,7 +142,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
   describe('Altersgrenze: Kind wird 25 Jahre alt (§ 2 Beitragsordnung)', () => {
     const currentYear = new Date().getFullYear();
 
-    it('Test 1: Kind ist 25+, hat KEINE eigene IBAN, aber Elternteil ist als Zahler eingetragen', () => {
+    it('Test 1: Kind ist 25+, hat KEINE eigene IBAN, aber Elternteil ist als Zahler eingetragen -> Fehler/Klärungsfall', () => {
       const members: Member[] = [
         {
           rowIndex: 2,
@@ -229,21 +229,20 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
 
       const result = processContributions(members);
 
-      // 1. Kind wird weiterhin der Gruppe des Vaters zugeordnet
-      expect(result.unassignedMembers.length).toBe(0);
-      expect(result.payerGroups.length).toBe(1);
+      // 1. Kind darf NICHT mehr der Elterngruppe zugeordnet werden
+      expect(result.unassignedMembers.length).toBe(1);
+      const unassignedChild = result.unassignedMembers[0];
+      expect(unassignedChild.id).toBe('1003');
+      expect(unassignedChild.issue).toContain('25 Jahre');
+      expect(unassignedChild.issue).toContain('neue Mitgliedschaft');
 
+      // 2. Elterngruppe umfasst nur noch die Eltern (Max 20 € + Partnerin 10 € = 30 €)
+      expect(result.payerGroups.length).toBe(1);
       const group = result.payerGroups[0];
       expect(group.payerId).toBe('1001');
-      expect(group.memberCount).toBe(3);
-
-      // 2. Kind fällt aus der Kinderregelung heraus und wird als Erwachsener aktiv (25 €) veranlagt
-      const kind = group.members.find(m => m.id === '1003');
-      expect(kind?.fee).toBe(25.0);
-      expect(kind?.reason).toBe('Erwachsenes Mitglied aktiv (25 €)');
-
-      // 3. Dem Familienzahler werden 20 € (Basis) + 10 € (Partner) + 25 € (Kind >= 25) = 55 € belastet
-      expect(group.totalAmount).toBe(55.0);
+      expect(group.memberCount).toBe(2);
+      expect(group.members.find(m => m.id === '1003')).toBeUndefined();
+      expect(group.totalAmount).toBe(30.0);
     });
 
     it('Test 2: Kind ist 25+, hat eine EIGENE IBAN / Mandat eingetragen (Eltern stehen noch als parent1/2 drin)', () => {
@@ -349,7 +348,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(kindGruppe?.members[0].reason).toBe('Erwachsener aktiv (25 €)');
     });
 
-    it('Test 3: Passives Kind wird 25+ (ohne eigene IBAN) -> zahlt 12 € als passiver Erwachsener über Familienzahler', () => {
+    it('Test 3: Passives Kind wird 25+ (ohne eigene IBAN) -> Fehler/Klärungsfall (kein Einzug über Zahler)', () => {
       const members: Member[] = [
         {
           rowIndex: 2,
@@ -408,13 +407,19 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       ];
 
       const result = processContributions(members);
-      const group = result.payerGroups[0];
 
-      // Zahler 20 € (Familienbeitrag Zahler) + passives Kind >= 25 (12 €) = 32 €
-      const kind = group.members.find(m => m.id === '1003');
-      expect(kind?.fee).toBe(12.0);
-      expect(kind?.reason).toBe('Erwachsenes Mitglied passiv (12 €)');
-      expect(group.totalAmount).toBe(32.0);
+      // Passives Kind >= 25 darf nicht über den Zahler abgebucht werden
+      expect(result.unassignedMembers.length).toBe(1);
+      const unassignedChild = result.unassignedMembers[0];
+      expect(unassignedChild.id).toBe('1003');
+      expect(unassignedChild.issue).toContain('25 Jahre');
+      expect(unassignedChild.issue).toContain('neue Mitgliedschaft');
+
+      // Zahler zahlt nur den Familienbeitrag für sich selbst (20 € gem. famPayerFlag)
+      const group = result.payerGroups[0];
+      expect(group.memberCount).toBe(1);
+      expect(group.members.find(m => m.id === '1003')).toBeUndefined();
+      expect(group.totalAmount).toBe(20.0);
     });
   });
 

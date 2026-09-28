@@ -483,7 +483,7 @@ export default function App(): React.JSX.Element {
                         </span>
                       </div>
                       <p className="text-xs text-amber-800/80 mt-0.5">
-                        Z.B. Barzahler, Kinder ohne hinterlegte Eltern, beitragsfreie oder ausgetretene Mitglieder.
+                        Z.B. Barzahler, Kinder ohne hinterlegte Eltern oder Mitglieder ab 25 Jahren ohne eigene IBAN.
                       </p>
                     </div>
                   </div>

@@ -335,7 +335,7 @@ export function processContributions(members: Member[]): ContributionResult {
     });
   });
 
-  const unassignedMembers: Member[] = [];
+  const unassignedMembers: UnassignedMember[] = [];
   const inactiveMembers: InactiveMember[] = [];
 
   // Alle gekündigten und verstorbenen Mitglieder erfassen
@@ -355,34 +355,43 @@ export function processContributions(members: Member[]): ContributionResult {
 
   nonPayers.forEach(m => {
     let matchedPayerId: string | null = null;
+    const isOver25ActiveOrPassive = !isInactiveMember(m) && m.age !== null && m.age >= 25;
+    const isPartnerMatch = Boolean(m.partner && m.partner !== '0' && payerGroups.has(m.partner));
 
-    if (m.partner && m.partner !== '0' && payerGroups.has(m.partner)) {
-      matchedPayerId = m.partner;
-    } else if (m.parent1 && m.parent1 !== '0' && payerGroups.has(m.parent1)) {
-      matchedPayerId = m.parent1;
-    } else if (m.parent2 && m.parent2 !== '0' && payerGroups.has(m.parent2)) {
-      matchedPayerId = m.parent2;
-    }
-
-    if (!matchedPayerId) {
-      const p1 = memberMap.get(m.parent1);
-      const p2 = memberMap.get(m.parent2);
-      if (p1 && p1.partner && payerGroups.has(p1.partner)) {
-        matchedPayerId = p1.partner;
-      } else if (p2 && p2.partner && payerGroups.has(p2.partner)) {
-        matchedPayerId = p2.partner;
+    if (isOver25ActiveOrPassive) {
+      if (isPartnerMatch) {
+        matchedPayerId = m.partner;
       }
-    }
+      // Wenn aktiv/passiv, >= 25 und kein Lebenspartner: Herauslösung aus dem Familienbeitrag (§ 2 Beitragsordnung)
+    } else {
+      if (isPartnerMatch) {
+        matchedPayerId = m.partner;
+      } else if (m.parent1 && m.parent1 !== '0' && payerGroups.has(m.parent1)) {
+        matchedPayerId = m.parent1;
+      } else if (m.parent2 && m.parent2 !== '0' && payerGroups.has(m.parent2)) {
+        matchedPayerId = m.parent2;
+      }
 
-    if (!matchedPayerId && m.accountHolder) {
-      const normHolder = normalizeName(m.accountHolder);
-      for (const [payerId, group] of payerGroups.entries()) {
-        const p = group.payer;
-        const normPayerHolder = normalizeName(p.accountHolder);
-        const normPayerName = normalizeName(p.fullName);
-        if (normHolder === normPayerHolder || normHolder === normPayerName) {
-          matchedPayerId = payerId;
-          break;
+      if (!matchedPayerId) {
+        const p1 = memberMap.get(m.parent1);
+        const p2 = memberMap.get(m.parent2);
+        if (p1 && p1.partner && payerGroups.has(p1.partner)) {
+          matchedPayerId = p1.partner;
+        } else if (p2 && p2.partner && payerGroups.has(p2.partner)) {
+          matchedPayerId = p2.partner;
+        }
+      }
+
+      if (!matchedPayerId && m.accountHolder) {
+        const normHolder = normalizeName(m.accountHolder);
+        for (const [payerId, group] of payerGroups.entries()) {
+          const p = group.payer;
+          const normPayerHolder = normalizeName(p.accountHolder);
+          const normPayerName = normalizeName(p.fullName);
+          if (normHolder === normPayerHolder || normHolder === normPayerName) {
+            matchedPayerId = payerId;
+            break;
+          }
         }
       }
     }
@@ -394,7 +403,12 @@ export function processContributions(members: Member[]): ContributionResult {
     } else {
       // Gekündigte/verstorbene Mitglieder ohne Zahler sind KEIN Fehler/Problem, sondern regulär inaktiv!
       if (!isInactiveMember(m)) {
-        unassignedMembers.push(m);
+        unassignedMembers.push({
+          ...m,
+          issue: isOver25ActiveOrPassive
+            ? 'Mitglied ist ≥ 25 Jahre alt ohne eigene IBAN (neue Mitgliedschaft erforderlich gem. § 2 Beitragsordnung).'
+            : 'Kein Zahler mit gültiger IBAN/Mandat zugeordnet.',
+        });
       }
     }
   });
@@ -498,13 +512,9 @@ export function processContributions(members: Member[]): ContributionResult {
             reason = 'Passives Kind unter 25 Jahren (im Familienbeitrag abgedeckt)';
           }
         } else {
-          if (m.status === 'active') {
-            fee = 25.0;
-            reason = 'Erwachsenes Mitglied aktiv (25 €)';
-          } else {
-            fee = 12.0;
-            reason = 'Erwachsenes Mitglied passiv (12 €)';
-          }
+          errors.push(`Mitglied ${m.fullName} ist ≥ 25 Jahre alt (§ 2 Beitragsordnung) und darf nicht über die Familie abgebucht werden.`);
+          fee = 0;
+          reason = 'Fehler: Mitglied ≥ 25 Jahre (eigene Mitgliedschaft erforderlich)';
         }
       }
 
@@ -536,10 +546,7 @@ export function processContributions(members: Member[]): ContributionResult {
 
   return {
     payerGroups: results,
-    unassignedMembers: unassignedMembers.map(m => ({
-      ...m,
-      issue: 'Kein Zahler mit gültiger IBAN/Mandat zugeordnet.',
-    })),
+    unassignedMembers,
     inactiveMembers,
   };
 }
