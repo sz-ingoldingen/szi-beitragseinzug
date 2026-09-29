@@ -119,7 +119,7 @@ export default function App(): React.JSX.Element {
     setPayerGroupsState(prev =>
       prev.map(g => {
         if (filteredIds.has(g.payerId)) {
-          return { ...g, selectedForExport: select && g.isValid && g.totalAmount > 0 };
+          return { ...g, selectedForExport: select && g.isValid && g.totalAmount > 0 && !g.isInvoice };
         }
         return g;
       })
@@ -141,6 +141,7 @@ export default function App(): React.JSX.Element {
       family: payerGroupsState.filter(g => matchesStatusFilter(g, 'family')).length,
       single: payerGroupsState.filter(g => matchesStatusFilter(g, 'single')).length,
       free: payerGroupsState.filter(g => matchesStatusFilter(g, 'free')).length,
+      invoice: payerGroupsState.filter(g => matchesStatusFilter(g, 'invoice')).length,
       valid: payerGroupsState.filter(g => matchesValidityFilter(g, 'valid')).length,
       issues: payerGroupsState.filter(g => matchesValidityFilter(g, 'issues')).length,
     };
@@ -223,7 +224,7 @@ export default function App(): React.JSX.Element {
                 </span>
               </div>
               <p className="text-xs text-[#E4D5F7]">
-                Automatische Beitragsberechnung & Lastschriftenerstellung (Beitragsordnung 2025)
+                Automatische Beitragsberechnung & Lastschriftenerstellung (Stichtag: 15.04. | Beitragsordnung 2025)
               </p>
             </div>
           </div>
@@ -450,6 +451,7 @@ export default function App(): React.JSX.Element {
                         { id: 'family', label: 'Familienbeitrag', count: filterCounts.family, activeStyle: 'bg-[#7042A6] text-white border-[#7042A6]' },
                         { id: 'single', label: 'Einzelzahler', count: filterCounts.single, activeStyle: 'bg-slate-700 text-white border-slate-700' },
                         { id: 'free', label: 'Beitragsfrei (0 €)', count: filterCounts.free, activeStyle: 'bg-emerald-700 text-white border-emerald-700' },
+                        { id: 'invoice', label: 'Per Rechnung', count: filterCounts.invoice, activeStyle: 'bg-amber-600 text-white border-amber-600' },
                       ].map(opt => {
                         const isActive = statusFilter === opt.id;
                         return (
@@ -851,6 +853,11 @@ export default function App(): React.JSX.Element {
                                   Einzelzahler
                                 </span>
                               )}
+                              {group.isInvoice && (
+                                <span className="text-xs bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full font-semibold">
+                                  Per Rechnung
+                                </span>
+                              )}
                               {group.members.some(m => isHonoraryMember(m)) && (
                                 <span className="text-xs bg-amber-50 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shadow-2xs">
                                   <Award className="w-3 h-3 text-[#C69214]" />
@@ -886,11 +893,19 @@ export default function App(): React.JSX.Element {
                             </div>
 
                             <div className="text-xs text-stone-500 flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 font-mono">
-                              <span>IBAN: <strong className="text-stone-700">{group.iban}</strong></span>
-                              {group.bic && <span>BIC: {group.bic}</span>}
-                              <span>Mandat: <strong>{group.mandate}</strong></span>
-                              {group.signatureDate && (
-                                <span>Datum: {group.signatureDate}</span>
+                              {group.isInvoice ? (
+                                <span className="font-sans text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                  Zahlungsweg: Per Rechnung (Selbstzahler, kein SEPA-Lastschrifteinzug)
+                                </span>
+                              ) : (
+                                <>
+                                  <span>IBAN: <strong className="text-stone-700">{group.iban}</strong></span>
+                                  {group.bic && <span>BIC: {group.bic}</span>}
+                                  <span>Mandat: <strong>{group.mandate}</strong></span>
+                                  {group.signatureDate && (
+                                    <span>Datum: {group.signatureDate}</span>
+                                  )}
+                                </>
                               )}
                             </div>
 

@@ -7,6 +7,11 @@ import {
   parseMembersCSV,
   processContributions,
   generateAuditCsv,
+  generateSepaCsv,
+  calculateAge,
+  getDefaultCutoffDate,
+  isInvoicePayer,
+  isValidIBAN,
   Member,
   matchesStatusFilter,
   matchesValidityFilter,
@@ -1464,6 +1469,301 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(group.totalAmount).toBe(0.0);
       expect(group.members[0].fee).toBe(0.0);
       expect(group.members[0].reason).toContain('Beitragsfrei gem. § 1 Abs. 6');
+    });
+  });
+
+  describe('Stichtag 15.04. für Altersberechnungen & Fälligkeit', () => {
+    it('getDefaultCutoffDate liefert den 15. April des Jahres', () => {
+      const cutoff = getDefaultCutoffDate(2026);
+      expect(cutoff.getFullYear()).toBe(2026);
+      expect(cutoff.getMonth()).toBe(3); // 3 = April (0-indexiert)
+      expect(cutoff.getDate()).toBe(15);
+    });
+
+    it('berechnet Alter bezogen auf den Stichtag 15.04. (Person wird im Herbst 18 -> bleibt 17 zum Stichtag)', () => {
+      const cutoff = new Date(2026, 3, 15);
+      // Geburtstag im August 2008 -> wird erst im August 2026 18 Jahre alt
+      const ageAutumn = calculateAge('20.08.2008', cutoff);
+      expect(ageAutumn).toBe(17);
+
+      // Geburtstag vor dem 15.04.2008 -> ist zum Stichtag bereits 18
+      const ageSpring = calculateAge('10.04.2008', cutoff);
+      expect(ageSpring).toBe(18);
+    });
+
+    it('berechnet Alter bezogen auf 15.04. für Altersgrenze 25 (Person wird im Herbst 25 -> bleibt 24 zum Stichtag)', () => {
+      const cutoff = new Date(2026, 3, 15);
+      // Geburtstag im Oktober 2001 -> wird erst im Oktober 2026 25 Jahre alt
+      const ageAutumn = calculateAge('01.10.2001', cutoff);
+      expect(ageAutumn).toBe(24);
+
+      // Geburtstag vor dem 15.04.2001 -> ist zum Stichtag bereits 25
+      const ageSpring = calculateAge('01.01.2001', cutoff);
+      expect(ageSpring).toBe(25);
+    });
+  });
+
+  describe('Ehrenmitglieder im Familienverbund (§ 1 Abs. 6 & G1/G6)', () => {
+    it('Ehrenmitglied als Familienzahler: zahlt 0 €; Hinweis für Familie wird erzeugt', () => {
+      const members: Member[] = [
+        createMember({
+          id: '2001',
+          firstName: 'Anton',
+          lastName: 'Ehrenvorstand',
+          fullName: 'Anton Ehrenvorstand',
+          accountHolder: 'Anton Ehrenvorstand',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-ANTON',
+          signatureDate: '01.01.2020',
+          boardFunction: 'Ehrenvorstand',
+          status: 'active',
+          famPayerFlag: '1',
+          partner: '2002',
+        }),
+        createMember({
+          id: '2002',
+          firstName: 'Berta',
+          lastName: 'Ehrenvorstand',
+          fullName: 'Berta Ehrenvorstand',
+          accountHolder: 'Anton Ehrenvorstand',
+          iban: '',
+          sepaMandate: '',
+          status: 'active',
+          birthDate: '01.01.1975',
+          age: 51,
+          partner: '2001',
+        }),
+      ];
+
+      const result = processContributions(members);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      // Anton (Ehrenvorstand) ist beitragsfrei (0 €)
+      expect(group.members[0].fee).toBe(0.0);
+      expect(group.members[0].reason).toContain('Beitragsfrei gem. § 1 Abs. 6');
+
+      // Berta übernimmt den Familiensockel
+      expect(group.members[1].fee).toBe(20.0);
+      expect(group.members[1].reason).toContain('Familienbeitrag über Angehörige(n)');
+
+      // Gesamtsumme ist 20 €
+      expect(group.totalAmount).toBe(20.0);
+
+      // Warnung/Hinweis vorhanden, dass Zahler Ehrenmitglied ist
+      expect(group.warnings.some(w => w.includes('fällt aus dem Familienbeitrag heraus'))).toBe(true);
+    });
+
+    it('Ehrenmitglied als Angehörige: zahlt 0 €, Zahler ohne weitere Angehörige wird auf Einzelbeitrag umgestellt', () => {
+      const members: Member[] = [
+        createMember({
+          id: '2010',
+          firstName: 'Max',
+          lastName: 'Normal',
+          fullName: 'Max Normal',
+          accountHolder: 'Max Normal',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-MAX',
+          signatureDate: '01.01.2020',
+          status: 'active',
+          famPayerFlag: '1',
+          partner: '2011',
+        }),
+        createMember({
+          id: '2011',
+          firstName: 'Maria',
+          lastName: 'Normal',
+          fullName: 'Maria Normal',
+          accountHolder: 'Max Normal',
+          iban: '',
+          sepaMandate: '',
+          status: 'active',
+          clubFunction: 'Ehrenmitglied', // Maria ist Ehrenmitglied!
+          birthDate: '01.01.1975',
+          age: 51,
+          partner: '2010',
+        }),
+      ];
+
+      const result = processContributions(members);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      // Maria ist beitragsfrei (0 €)
+      expect(group.members[1].fee).toBe(0.0);
+      expect(group.members[1].reason).toContain('Beitragsfrei gem. § 1 Abs. 6');
+
+      // Max wird als Einzelzahler (aktiv: 25 €) veranlagt, da Maria als Ehrenmitglied aus dem Familienverbund herausfällt
+      expect(group.isFamily).toBe(false);
+      expect(group.members[0].fee).toBe(25.0);
+      expect(group.totalAmount).toBe(25.0);
+
+      // Hinweis über Herauslösung vorhanden
+      expect(group.warnings.some(w => w.includes('Maria Normal ist beitragsfreies Ehrenmitglied'))).toBe(true);
+    });
+
+    it('Ehrenmitglied als Familienzahler mit nur beitragsfreien Kindern (< 18 J.): Gesamtbetrag 0 € ohne Warnung', () => {
+      const members: Member[] = [
+        createMember({
+          id: '2020',
+          firstName: 'Josef',
+          lastName: 'Ehrendirigent',
+          fullName: 'Josef Ehrendirigent',
+          accountHolder: 'Josef Ehrendirigent',
+          iban: 'DE23100000001234567890',
+          bic: 'TESTDEDDXXX',
+          sepaMandate: 'MANDAT-JOSEF',
+          signatureDate: '01.01.2020',
+          clubFunction: 'Ehrendirigent',
+          status: 'active',
+          famPayerFlag: '1',
+        }),
+        createMember({
+          id: '2021',
+          firstName: 'Kind',
+          lastName: 'Ehrendirigent',
+          fullName: 'Kind Ehrendirigent',
+          accountHolder: 'Josef Ehrendirigent',
+          iban: '',
+          sepaMandate: '',
+          status: 'child',
+          birthDate: '01.01.2015',
+          age: 11,
+          parent1: '2020',
+        }),
+      ];
+
+      const result = processContributions(members);
+      const group = result.payerGroups[0];
+      expect(group.totalAmount).toBe(0.0);
+      expect(group.members[0].fee).toBe(0.0);
+      expect(group.members[1].fee).toBe(0.0);
+      // Da alle legitim beitragsfrei sind, keine Warnung bzgl. fehlendem Familienzahler
+      expect(group.warnings.some(w => w.includes('Für die Familie liegt kein regulärer Familienbeitragszahler vor'))).toBe(false);
+    });
+  });
+
+  describe('Rechnungszahler (IBAN "Per Rechnung" & Ausschluss aus SEPA)', () => {
+    it('isInvoicePayer erkennt verschiedene Schreibweisen von "Per Rechnung"', () => {
+      expect(isInvoicePayer('Per Rechnung')).toBe(true);
+      expect(isInvoicePayer('per rechnung')).toBe(true);
+      expect(isInvoicePayer('RECHNUNG')).toBe(true);
+      expect(isInvoicePayer('Rechnungszahler')).toBe(true);
+      expect(isInvoicePayer('DE23100000001234567890')).toBe(false);
+      expect(isInvoicePayer('')).toBe(false);
+    });
+
+    it('erfasst Rechnungszahler als gültig, aber automatisch von SEPA-Export ausgenommen', () => {
+      const invoiceMember = createMember({
+        id: '3001',
+        firstName: 'Rechnungs',
+        lastName: 'Zahler',
+        fullName: 'Rechnungs Zahler',
+        accountHolder: 'Rechnungs Zahler',
+        iban: 'Per Rechnung',
+        bic: '',
+        sepaMandate: '',
+        status: 'active',
+      });
+
+      const result = processContributions([invoiceMember]);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.isInvoice).toBe(true);
+      expect(group.isValid).toBe(true);
+      expect(group.errors.length).toBe(0); // Kein IBAN- oder Mandatsfehler!
+      expect(group.selectedForExport).toBe(false); // Nicht für SEPA ausgewählt
+      expect(group.totalAmount).toBe(25.0); // Beitrag wird trotzdem berechnet
+      expect(group.warnings.some(w => w.includes('Zahlungsart: Per Rechnung'))).toBe(true);
+
+      // In SEPA-CSV darf der Rechnungszahler NICHT exportiert werden
+      const sepaCsv = generateSepaCsv(result.payerGroups);
+      expect(sepaCsv).not.toContain('Rechnungs Zahler');
+
+      // StatusFilter "invoice" findet die Gruppe
+      expect(matchesStatusFilter(group, 'invoice')).toBe(true);
+      expect(matchesStatusFilter(group, 'active')).toBe(true);
+    });
+  });
+
+  describe('Warnung bei Status "Kind" mit Alter >= 18 zum Stichtag', () => {
+    it('erzeugt Warnung bei Mitglied mit Status "child" und Alter >= 18', () => {
+      const grownChild = createMember({
+        id: '4001',
+        firstName: 'Erwachsenes',
+        lastName: 'Kind',
+        fullName: 'Erwachsenes Kind',
+        accountHolder: 'Erwachsenes Kind',
+        iban: 'DE23100000001234567890',
+        bic: 'TESTDEDDXXX',
+        sepaMandate: 'MANDAT-KIND',
+        signatureDate: '01.01.2020',
+        status: 'child', // Status ist Kind
+        birthDate: '01.01.2006', // 20 Jahre alt
+        age: 20,
+      });
+
+      const result = processContributions([grownChild]);
+      const group = result.payerGroups[0];
+
+      // Warnung bzgl. Alter >= 18 bei Status Kind vorhanden
+      expect(group.warnings.some(w => w.includes('Status „Kind“, ist aber zum Stichtag (15.04.) bereits 20 Jahre alt'))).toBe(true);
+      // Zahlt als Erwachsener aktiv (25 €), da status 'child' ein aktiver Status ist
+      expect(group.totalAmount).toBe(25.0);
+    });
+
+    it('erzeugt Warnung bei passiver Jugend/Kind (Status "pkid") mit Alter >= 18 (zahlt 12 € passiv)', () => {
+      const grownPassiveChild = createMember({
+        id: '4002',
+        firstName: 'Passives',
+        lastName: 'Kind',
+        fullName: 'Passives Kind',
+        accountHolder: 'Passives Kind',
+        iban: 'DE23100000001234567890',
+        bic: 'TESTDEDDXXX',
+        sepaMandate: 'MANDAT-PKID',
+        signatureDate: '01.01.2020',
+        status: 'pkid', // Status ist Passiv (Kind)
+        birthDate: '01.01.2006', // 20 Jahre alt
+        age: 20,
+      });
+
+      const result = processContributions([grownPassiveChild]);
+      const group = result.payerGroups[0];
+
+      expect(group.warnings.some(w => w.includes('Status „Passiv (Kind)“, ist aber zum Stichtag (15.04.) bereits 20 Jahre alt'))).toBe(true);
+      expect(group.totalAmount).toBe(12.0); // Passiv veranlagt (12 €)
+    });
+  });
+
+  describe('Internationale IBANs & Warnung bei Nicht-DE', () => {
+    it('erkennt ausländische IBAN mit gültigem MOD 97 als valide mit Prüfhinweis (Warnung)', () => {
+      // Gültige österreichische IBAN (AT611904300234573201)
+      const foreignPayer = createMember({
+        id: '5001',
+        firstName: 'Ösi',
+        lastName: 'Musiker',
+        fullName: 'Ösi Musiker',
+        accountHolder: 'Ösi Musiker',
+        iban: 'AT611904300234573201',
+        bic: 'TESTDEDDXXX',
+        sepaMandate: 'MANDAT-AT',
+        signatureDate: '01.01.2020',
+        status: 'active',
+      });
+
+      expect(isValidIBAN('AT611904300234573201')).toBe(true);
+
+      const result = processContributions([foreignPayer]);
+      const group = result.payerGroups[0];
+
+      expect(group.isValid).toBe(true);
+      expect(group.errors.length).toBe(0);
+      expect(group.warnings.some(w => w.includes('Ausländische IBAN'))).toBe(true);
+      expect(group.selectedForExport).toBe(true);
     });
   });
 });

@@ -45,6 +45,7 @@ export interface PayerGroup {
   memberCount: number;
   members: CalculatedMember[];
   isFamily: boolean;
+  isInvoice?: boolean;
   errors: string[];
   warnings: string[];
   isValid: boolean;
@@ -282,12 +283,26 @@ export function isGuestStatus(status: string): boolean {
 }
 
 /**
- * Validiert eine deutsche IBAN per Modulo 97 (ISO 7064).
+ * Prüft, ob ein IBAN-Feld den Vermerk "Per Rechnung" enthält.
+ */
+export function isInvoicePayer(iban: string): boolean {
+  if (!iban) return false;
+  const clean = iban.toLowerCase().replace(/\s+/g, '');
+  return clean.includes('rechnung');
+}
+
+/**
+ * Validiert eine IBAN per Modulo 97 (ISO 7064).
+ * Deutsche IBANs müssen genau 22 Zeichen lang sein und mit DE beginnen.
+ * Bei ausländischen IBANs wird die internationale MOD-97-Prüfziffer validiert.
  */
 export function isValidIBAN(iban: string): boolean {
   if (!iban) return false;
   const clean = iban.replace(/\s+/g, '').toUpperCase();
-  if (!clean.startsWith('DE') || clean.length !== 22) return false;
+  if (isInvoicePayer(clean)) return true;
+
+  if (clean.length < 15 || clean.length > 34) return false;
+  if (clean.startsWith('DE') && clean.length !== 22) return false;
 
   const rearranged = clean.slice(4) + clean.slice(0, 4);
   const digits = rearranged
@@ -307,9 +322,20 @@ export function isValidIBAN(iban: string): boolean {
 }
 
 /**
- * Berechnet das Alter basierend auf einem Geburtsdatum (DD.MM.YYYY oder YYYY-MM-DD).
+ * Standard-Stichtag für Altersberechnungen (15. April des aktuellen bzw. angegebenen Jahres, analog Aufnahmeantrag).
  */
-export function calculateAge(birthDateStr: string, referenceDate: Date = new Date()): number | null {
+export const DEFAULT_CUTOFF_DAY = 15;
+export const DEFAULT_CUTOFF_MONTH = 3; // April (0-indexiert)
+
+export function getDefaultCutoffDate(year: number = new Date().getFullYear()): Date {
+  return new Date(year, DEFAULT_CUTOFF_MONTH, DEFAULT_CUTOFF_DAY);
+}
+
+/**
+ * Berechnet das Alter basierend auf einem Geburtsdatum (DD.MM.YYYY oder YYYY-MM-DD)
+ * bezogen auf das Stichtagsdatum (standardmäßig 15.04. des aktuellen Kalenderjahres).
+ */
+export function calculateAge(birthDateStr: string, referenceDate: Date = getDefaultCutoffDate()): number | null {
   if (!birthDateStr) return null;
   const clean = birthDateStr.trim();
   let day: number, month: number, year: number;
@@ -459,7 +485,7 @@ export function isInactiveMember(member: Member): boolean {
 /**
  * Parst die Roh-CSV und überführt die Zeilen in ein typisiertes Format.
  */
-export function parseMembersCSV(csvText: string): Member[] {
+export function parseMembersCSV(csvText: string, referenceDate: Date = getDefaultCutoffDate()): Member[] {
   const result = Papa.parse<string[]>(csvText.trim(), {
     header: false,
     skipEmptyLines: true,
@@ -494,10 +520,11 @@ export function parseMembersCSV(csvText: string): Member[] {
     const lastName = getCol(r, 'Nachname', 7);
     const status = getCol(r, 'Status', 6).toLowerCase();
     const birthDate = getCol(r, 'Geburtsdatum', 11);
-    const age = calculateAge(birthDate);
+    const age = calculateAge(birthDate, referenceDate);
 
     const accountHolder = getCol(r, 'Kontoinhaber', 21);
-    const iban = getCol(r, 'IBAN', 22).replace(/\s+/g, '').toUpperCase();
+    const rawIban = getCol(r, 'IBAN', 22);
+    const iban = isInvoicePayer(rawIban) ? rawIban.trim() : rawIban.replace(/\s+/g, '').toUpperCase();
     const bic = getCol(r, 'BIC', 23).replace(/\s+/g, '').toUpperCase();
     const sepaMandate = getCol(r, 'SEPA-Mandat', 24);
     const signatureDate = getCol(r, 'Unterschriftsdatum', 25);
@@ -567,9 +594,10 @@ export function processContributions(members: Member[]): ContributionResult {
   const nonPayers: Member[] = [];
 
   members.forEach(m => {
+    const isInvoice = isInvoicePayer(m.iban);
     const hasValidIban = m.iban.length > 0;
     const hasMandate = m.sepaMandate.length > 0 && m.sepaMandate.toLowerCase() !== 'n.a.';
-    if (hasValidIban && hasMandate) {
+    if (isInvoice || (hasValidIban && hasMandate)) {
       payers.push(m);
     } else {
       nonPayers.push(m);
@@ -653,11 +681,16 @@ export function processContributions(members: Member[]): ContributionResult {
     } else {
       // Gekündigte/verstorbene Mitglieder ohne Zahler sind KEIN Fehler/Problem, sondern regulär inaktiv!
       if (!isInactiveMember(m)) {
+        const isChildWithAge18 = isChildOrYouthStatus(m.status) && m.age !== null && m.age >= 18;
+        let issue = isOver25ActiveOrPassive
+          ? 'Mitglied ist ≥ 25 Jahre alt ohne eigene IBAN (neue Mitgliedschaft erforderlich gem. § 2 Beitragsordnung).'
+          : 'Kein Zahler mit gültiger IBAN/Mandat zugeordnet.';
+        if (isChildWithAge18) {
+          issue += ` (Hinweis: Status „${getMemberStatusLabel(m.status)}“, aber bereits ${m.age} Jahre alt zum Stichtag 15.04.)`;
+        }
         unassignedMembers.push({
           ...m,
-          issue: isOver25ActiveOrPassive
-            ? 'Mitglied ist ≥ 25 Jahre alt ohne eigene IBAN (neue Mitgliedschaft erforderlich gem. § 2 Beitragsordnung).'
-            : 'Kein Zahler mit gültiger IBAN/Mandat zugeordnet.',
+          issue,
         });
       }
     }
@@ -668,15 +701,21 @@ export function processContributions(members: Member[]): ContributionResult {
   payerGroups.forEach(group => {
     const payer = group.payer;
     const groupMembers = group.members;
+    const isPayerHonorary = isHonoraryMember(payer);
+    const isInvoice = isInvoicePayer(payer.iban);
+
+    // Alle lebenden Angehörigen (ohne Zahler selbst und ohne inaktive)
+    const otherLivingMembers = groupMembers.filter(m => m.id !== payer.id && !isInactiveMember(m));
+    // Lebende Angehörige, die KEINE Ehrenmitglieder sind
+    const nonHonoraryOtherLiving = otherLivingMembers.filter(m => !isHonoraryMember(m));
+
+    // Alleinstehende Familienzahler:
+    // Ein Ehrenmitglied zahlt nie den Familienbeitrag (fällt immer aus der Familie heraus).
+    // Wenn neben dem Zahler keine weiteren beitragspflichtigen Angehörigen vorhanden sind,
+    // wird automatisch auf Einzelzahler umgestellt.
     const isMultiMember = groupMembers.length > 1;
     const hasFamilyFlag = groupMembers.some(m => m.famPayerFlag === '1' || m.famMemberFlag === '1');
-
-    // Prüfen, ob neben dem Zahler noch weitere lebende/aktive Angehörige vorhanden sind
-    const otherLivingMembers = groupMembers.filter(m => m.id !== payer.id && !isInactiveMember(m));
-
-    // Alleinstehende Familienzahler (keine weiteren aktiven/lebenden Angehörigen) werden automatisch
-    // und ohne Rückfrage/Warnung auf Einzelzahler umgestellt.
-    const isFamily = (isMultiMember || hasFamilyFlag) && otherLivingMembers.length > 0;
+    const isFamily = !isPayerHonorary && (isMultiMember || hasFamilyFlag) && nonHonoraryOtherLiving.length > 0;
 
     // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
     // Sie werden nicht in die aktiven Lastschriften aufgenommen
@@ -692,15 +731,59 @@ export function processContributions(members: Member[]): ContributionResult {
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    if (!isValidIBAN(payer.iban)) {
-      errors.push('Ungültige IBAN (Prüfziffer stimmt nicht).');
+    // IBAN- & Mandatsprüfungen
+    if (isInvoice) {
+      warnings.push('Zahlungsart: Per Rechnung (Selbstzahler, kein SEPA-Einzug).');
+    } else {
+      if (!payer.iban) {
+        errors.push('IBAN fehlt beim Zahler.');
+      } else if (!isValidIBAN(payer.iban)) {
+        errors.push('Ungültige IBAN (Prüfziffer stimmt nicht).');
+      } else if (!payer.iban.startsWith('DE')) {
+        warnings.push(`Ausländische IBAN (${payer.iban}) – bitte vor Einzug SEPA-Fähigkeit prüfen.`);
+      }
+
+      if (!payer.sepaMandate || payer.sepaMandate.toLowerCase() === 'n.a.') {
+        errors.push('Fehlendes SEPA-Mandat.');
+      }
+      if (!payer.signatureDate) {
+        warnings.push('Unterschriftsdatum des Mandats fehlt.');
+      }
     }
-    if (!payer.sepaMandate || payer.sepaMandate.toLowerCase() === 'n.a.') {
-      errors.push('Fehlendes SEPA-Mandat.');
+
+    // Ehrenmitglied als Familienzahler: Fällt aus Familienbeitrag heraus (0 €)
+    // Wenn weitere beitragspflichtige Angehörige vorhanden sind, Warnung erzeugen!
+    if (isPayerHonorary && nonHonoraryOtherLiving.length > 0) {
+      const liableOthers = nonHonoraryOtherLiving.filter(m => {
+        const isUnder18 = m.age !== null ? m.age < 18 : isChildOrYouthStatus(m.status);
+        return !isUnder18;
+      });
+      if (liableOthers.length > 0) {
+        warnings.push(
+          `Zahler ${payer.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus. Für die Familie liegt kein regulärer Familienbeitragszahler vor (Klärung erforderlich).`
+        );
+      }
     }
-    if (!payer.signatureDate) {
-      warnings.push('Unterschriftsdatum des Mandats fehlt.');
-    }
+
+    // Angehörige, die Ehrenmitglieder sind, erzeugen Hinweis zur Herauslösung
+    const honoraryOthers = otherLivingMembers.filter(m => isHonoraryMember(m));
+    honoraryOthers.forEach(hm => {
+      warnings.push(
+        `Angehörige(r) ${hm.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus.`
+      );
+    });
+
+    // Prüfen auf Diskrepanz Status "Kind" aber Alter >= 18 zum Stichtag 15.04.
+    groupMembers.forEach(m => {
+      const isChildByStatus = isChildOrYouthStatus(m.status);
+      if (isChildByStatus && m.age !== null && m.age >= 18) {
+        warnings.push(
+          `Mitglied ${m.fullName} (${m.id}) hat Status „${getMemberStatusLabel(m.status)}“, ist aber zum Stichtag (15.04.) bereits ${m.age} Jahre alt (Stammdaten prüfen).`
+        );
+      }
+    });
+
+    let familyBaseAssigned = false;
 
     groupMembers.forEach(m => {
       const isPayerSelf = m.id === payer.id;
@@ -715,15 +798,17 @@ export function processContributions(members: Member[]): ContributionResult {
       if (isResignedOrDeceased) {
         fee = 0;
         reason = isDeceased(m) ? 'Verstorben (0 €)' : 'Ausgetreten / Gekündigt (0 €)';
+      } else if (isHonorary) {
+        // Ehrenmitglieder und Träger von Ehrenämtern sind IMMER beitragsfrei (0 €)
+        fee = 0;
+        reason = 'Beitragsfrei gem. § 1 Abs. 6 (Ehrenvorstand / Ehrenmitglied)';
       } else if (isPayerSelf) {
         if (isFamily) {
           fee = 20.0;
           reason = 'Familienbeitrag (Zahler)';
+          familyBaseAssigned = true;
         } else {
-          if (isHonorary) {
-            fee = 0;
-            reason = 'Beitragsfrei gem. § 1 Abs. 6 (Ehrenvorstand / Ehrenmitglied)';
-          } else if (isUnder18) {
+          if (isUnder18) {
             fee = 0;
             reason = 'Jugendlicher unter 18 beitragsfrei';
           } else if (m.status === 'active' || isActiveStatus(m.status)) {
@@ -742,12 +827,15 @@ export function processContributions(members: Member[]): ContributionResult {
           }
         }
       } else {
-        if (isHonorary) {
-          fee = 0;
-          reason = 'Beitragsfrei gem. § 1 Abs. 6 (Ehrenvorstand / Ehrenmitglied)';
-        } else if (isUnder18) {
+        // Angehörige im Verbund
+        if (isUnder18) {
           fee = 0;
           reason = 'Kind/Jugendlicher unter 18 beitragsfrei';
+        } else if (isPayerHonorary && !familyBaseAssigned && (m.partner === payer.id || payer.partner === m.id || (m.age !== null && m.age >= 18))) {
+          // Falls Zahler Ehrenmitglied ist und herausfällt, übernimmt der erste beitragspflichtige Angehörige den Sockel
+          fee = 20.0;
+          reason = 'Familienbeitrag über Angehörige(n) (20 €) [Zahler ist beitragsfreies Ehrenmitglied]';
+          familyBaseAssigned = true;
         } else if (m.partner === payer.id || payer.partner === m.id) {
           if (m.status === 'active' || isActiveStatus(m.status)) {
             fee = 10.0;
@@ -796,10 +884,11 @@ export function processContributions(members: Member[]): ContributionResult {
       memberCount: groupMembers.length,
       members: memberDetails,
       isFamily,
+      isInvoice,
       errors,
       warnings,
       isValid: errors.length === 0,
-      selectedForExport: errors.length === 0 && totalAmount > 0,
+      selectedForExport: errors.length === 0 && totalAmount > 0 && !isInvoice,
     });
   });
 
@@ -825,7 +914,7 @@ export function generateSepaCsv(payerGroups: PayerGroup[], purpose = 'Mitgliedsb
   ];
 
   const rows = payerGroups
-    .filter(g => g.selectedForExport && g.totalAmount > 0)
+    .filter(g => g.selectedForExport && g.totalAmount > 0 && !g.isInvoice)
     .map(g => [
       g.payerName,
       g.iban,
@@ -933,7 +1022,8 @@ export type StatusFilterType =
   | 'honorary'
   | 'family'
   | 'single'
-  | 'free';
+  | 'free'
+  | 'invoice';
 
 export type ValidityFilterType = 'all' | 'valid' | 'issues';
 
@@ -975,6 +1065,10 @@ export function matchesStatusFilter(group: PayerGroup, filter: StatusFilterType)
     case 'free':
       // Beitragsfrei (Gesamteinzugssumme 0,00 €)
       return group.totalAmount === 0;
+
+    case 'invoice':
+      // Rechnungszahler (Selbstzahler außerhalb SEPA)
+      return Boolean(group.isInvoice);
 
     default:
       return true;
