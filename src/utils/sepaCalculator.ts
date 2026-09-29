@@ -67,6 +67,221 @@ export interface ContributionResult {
 }
 
 /**
+ * Alle 26 möglichen Mitglieder-Status-Codes aus der Vereinsverwaltung (ClubDesk).
+ */
+export const MemberStatus = {
+  // Aktive Mitglieder
+  ACTIVE: 'active',
+  PREMIUM: 'premium', // Aktiv (50%)
+  LIMITED: 'limited', // Aktiv (Limitiert)
+  TWEN: 'twen', // Jungaktiv
+  TEEN: 'teen', // Jugend
+  CHILD: 'child', // Kind
+  INFANT: 'infant', // Kleinkind
+
+  // Passive Mitglieder
+  PASSIVE: 'passive', // Passiv
+  PPREM: 'pprem', // Passiv (Premium)
+  PLIMIT: 'plimit', // Passiv (Limitiert)
+  PTWEN: 'ptwen', // Passiv (Jungaktiv)
+  PTEEN: 'pteen', // Passiv (Jugend)
+  PKID: 'pkid', // Passiv (Kind)
+  PINFANT: 'pinfant', // Passiv (Kleinkind)
+  SENIOR: 'senior', // Rentner
+
+  // Gast-Mitglieder
+  GUEST: 'guest', // Gast
+  GPREM: 'gprem', // Gast (Premium)
+  GLIMIT: 'glimit', // Gast (Limitiert)
+  GTWEN: 'gtwen', // Gast (Jungaktiv)
+  GTEEN: 'gteen', // Gast (Jugend)
+  GKID: 'gkid', // Gast (Kind)
+  GINFANT: 'ginfant', // Gast (Kleinkind)
+
+  // Ehrenmitglied
+  SPONSOR: 'sponsor', // In der Vereinsverwaltung als "Ehrenmitglied" hinterlegt
+
+  // Temporär / Inaktiv
+  TEMP: 'temp', // Temporär
+  RESIGNED: 'resigned', // Ausgeschieden
+  DECEASED: 'deceased', // Verstorben
+} as const;
+
+export type MemberStatusCode = (typeof MemberStatus)[keyof typeof MemberStatus] | string;
+
+/**
+ * TypeScript Enum-Äquivalent für MemberStatus.
+ */
+export enum MemberStatusEnum {
+  PREMIUM = 'premium',
+  ACTIVE = 'active',
+  LIMITED = 'limited',
+  INFANT = 'infant',
+  CHILD = 'child',
+  TEEN = 'teen',
+  TWEN = 'twen',
+  PASSIVE = 'passive',
+  PPREM = 'pprem',
+  PLIMIT = 'plimit',
+  PINFANT = 'pinfant',
+  PKID = 'pkid',
+  PTEEN = 'pteen',
+  PTWEN = 'ptwen',
+  GUEST = 'guest',
+  GPREM = 'gprem',
+  GLIMIT = 'glimit',
+  GINFANT = 'ginfant',
+  GKID = 'gkid',
+  GTEEN = 'gteen',
+  GTWEN = 'gtwen',
+  SENIOR = 'senior',
+  SPONSOR = 'sponsor',
+  TEMP = 'temp',
+  RESIGNED = 'resigned',
+  DECEASED = 'deceased',
+}
+
+/**
+ * Klarnamen / Labels aller 26 Status-Codes gem. offizieller Konfiguration.
+ */
+export const MEMBER_STATUS_LABELS: Record<string, string> = {
+  [MemberStatus.PREMIUM]: 'Aktiv (50%)',
+  [MemberStatus.ACTIVE]: 'Aktiv',
+  [MemberStatus.LIMITED]: 'Aktiv (Limitiert)',
+  [MemberStatus.INFANT]: 'Kleinkind',
+  [MemberStatus.CHILD]: 'Kind',
+  [MemberStatus.TEEN]: 'Jugend',
+  [MemberStatus.TWEN]: 'Jungaktiv',
+
+  [MemberStatus.PASSIVE]: 'Passiv',
+  [MemberStatus.PPREM]: 'Passiv (Premium)',
+  [MemberStatus.PLIMIT]: 'Passiv (Limitiert)',
+  [MemberStatus.PINFANT]: 'Passiv (Kleinkind)',
+  [MemberStatus.PKID]: 'Passiv (Kind)',
+  [MemberStatus.PTEEN]: 'Passiv (Jugend)',
+  [MemberStatus.PTWEN]: 'Passiv (Jungaktiv)',
+  [MemberStatus.SENIOR]: 'Rentner',
+
+  [MemberStatus.GUEST]: 'Gast',
+  [MemberStatus.GPREM]: 'Gast (Premium)',
+  [MemberStatus.GLIMIT]: 'Gast (Limitiert)',
+  [MemberStatus.GINFANT]: 'Gast (Kleinkind)',
+  [MemberStatus.GKID]: 'Gast (Kind)',
+  [MemberStatus.GTEEN]: 'Gast (Jugend)',
+  [MemberStatus.GTWEN]: 'Gast (Jungaktiv)',
+
+  [MemberStatus.SPONSOR]: 'Ehrenmitglied',
+  [MemberStatus.TEMP]: 'Temporär',
+  [MemberStatus.RESIGNED]: 'Ausgeschieden',
+  [MemberStatus.DECEASED]: 'Verstorben',
+};
+
+/**
+ * Status-Codes aktiver Musiker / Mitwirkender.
+ */
+export const ACTIVE_STATUS_CODES: ReadonlySet<string> = new Set([
+  MemberStatus.ACTIVE,
+  MemberStatus.PREMIUM,
+  MemberStatus.LIMITED,
+  MemberStatus.TWEN,
+  MemberStatus.TEEN,
+  MemberStatus.CHILD,
+  MemberStatus.INFANT,
+]);
+
+/**
+ * Status-Codes erwachsener Aktiver (Vollbeitrag 25 € als Einzelzahler).
+ */
+export const ADULT_ACTIVE_STATUS_CODES: ReadonlySet<string> = new Set([
+  MemberStatus.ACTIVE,
+  MemberStatus.PREMIUM,
+  MemberStatus.LIMITED,
+  MemberStatus.TWEN,
+]);
+
+/**
+ * Status-Codes passiver Mitglieder (12 € als Einzelzahler).
+ */
+export const PASSIVE_STATUS_CODES: ReadonlySet<string> = new Set([
+  MemberStatus.PASSIVE,
+  MemberStatus.PPREM,
+  MemberStatus.PLIMIT,
+  MemberStatus.PINFANT,
+  MemberStatus.PKID,
+  MemberStatus.PTEEN,
+  MemberStatus.PTWEN,
+  MemberStatus.SENIOR,
+]);
+
+/**
+ * Status-Codes für Kinder und Jugendliche (< 18 Jahre beitragsfrei).
+ */
+export const CHILD_YOUTH_STATUS_CODES: ReadonlySet<string> = new Set([
+  MemberStatus.INFANT,
+  MemberStatus.CHILD,
+  MemberStatus.TEEN,
+  MemberStatus.PINFANT,
+  MemberStatus.PKID,
+  MemberStatus.PTEEN,
+  MemberStatus.GINFANT,
+  MemberStatus.GKID,
+  MemberStatus.GTEEN,
+]);
+
+/**
+ * Status-Codes für Gast-Mitglieder.
+ */
+export const GUEST_STATUS_CODES: ReadonlySet<string> = new Set([
+  MemberStatus.GUEST,
+  MemberStatus.GPREM,
+  MemberStatus.GLIMIT,
+  MemberStatus.GINFANT,
+  MemberStatus.GKID,
+  MemberStatus.GTEEN,
+  MemberStatus.GTWEN,
+]);
+
+/**
+ * Gibt die lesbare Bezeichnung für einen Status-Code zurück.
+ */
+export function getMemberStatusLabel(status: string): string {
+  const clean = (status || '').toLowerCase().trim();
+  return MEMBER_STATUS_LABELS[clean] || status || 'Unbekannt';
+}
+
+/**
+ * Prüft, ob ein Status als aktiv gilt.
+ */
+export function isActiveStatus(status: string): boolean {
+  const clean = (status || '').toLowerCase().trim();
+  return ACTIVE_STATUS_CODES.has(clean) || clean === 'aktiv';
+}
+
+/**
+ * Prüft, ob ein Status als passiv gilt.
+ */
+export function isPassiveStatus(status: string): boolean {
+  const clean = (status || '').toLowerCase().trim();
+  return PASSIVE_STATUS_CODES.has(clean) || clean === 'passiv';
+}
+
+/**
+ * Prüft, ob ein Status auf ein Kind oder einen Jugendlichen hinweist.
+ */
+export function isChildOrYouthStatus(status: string): boolean {
+  const clean = (status || '').toLowerCase().trim();
+  return CHILD_YOUTH_STATUS_CODES.has(clean) || clean.includes('kind') || clean.includes('jugend');
+}
+
+/**
+ * Prüft, ob ein Status ein Gast-Status ist.
+ */
+export function isGuestStatus(status: string): boolean {
+  const clean = (status || '').toLowerCase().trim();
+  return GUEST_STATUS_CODES.has(clean) || clean.startsWith('gast');
+}
+
+/**
  * Validiert eine deutsche IBAN per Modulo 97 (ISO 7064).
  */
 export function isValidIBAN(iban: string): boolean {
@@ -149,8 +364,17 @@ export function normalizeName(str: string): string {
  * sind NICHT beitragsfrei und zahlen den regulären Mitgliedsbeitrag.
  */
 export function isHonoraryMember(member: Member): boolean {
+  const statusClean = (member.status || '').toLowerCase().trim();
+  if (
+    statusClean === MemberStatus.SPONSOR ||
+    statusClean === 'sponsor' ||
+    statusClean === 'ehrenmitglied' ||
+    statusClean === 'honorary'
+  ) {
+    return true;
+  }
+
   const fields = [
-    member.status,
     member.boardFunction,
     member.clubFunction,
     member.otherFunction,
@@ -193,9 +417,11 @@ export function isResigned(member: Member): boolean {
   const hasResignedDate = resignedStr.length > 0 && resignedStr !== '0';
 
   return (
+    status === MemberStatus.RESIGNED ||
+    status === 'resigned' ||
+    status === 'ausgeschieden' ||
     status.includes('ausgetret') ||
     status.includes('austritt') ||
-    status.includes('resigned') ||
     status.includes('gekündigt') ||
     status.includes('gekuendigt') ||
     status.includes('inaktiv') ||
@@ -215,7 +441,12 @@ export function isResigned(member: Member): boolean {
 export function isDeceased(member: Member): boolean {
   const status = (member.status || '').toLowerCase().trim();
   const comment = (member.comment || '').toLowerCase().trim();
-  return status === 'deceased' || status === 'verstorben' || comment.includes('verstorben');
+  return (
+    status === MemberStatus.DECEASED ||
+    status === 'deceased' ||
+    status === 'verstorben' ||
+    comment.includes('verstorben')
+  );
 }
 
 /**
@@ -470,12 +701,12 @@ export function processContributions(members: Member[]): ContributionResult {
     }
     if (isSingleFamilyPayer) {
       let regularFee = '25,00 € (aktiv)';
-      if (payer.status === 'passive') {
+      if (isHonoraryMember(payer)) {
+        regularFee = '0,00 € (Ehrenmitglied beitragsfrei)';
+      } else if (payer.status === 'passive' || isPassiveStatus(payer.status)) {
         regularFee = '12,00 € (passiv)';
-      } else if (payer.status === 'sponsor') {
-        regularFee = '12,00 € (passiv / Sponsor)';
-      } else if (payer.status !== 'active') {
-        regularFee = `12,00 € (${payer.status})`;
+      } else if (payer.status !== 'active' && !isActiveStatus(payer.status)) {
+        regularFee = `12,00 € (${getMemberStatusLabel(payer.status)})`;
       }
       warnings.push(
         `Alleinstehender Familienzahler: Keine weiteren aktiven Familienangehörigen zugeordnet (z. B. Angehörige ausgetreten oder ≥ 25 Jahre). Umstellung auf regulären Einzelbeitrag (${regularFee}) und neue Mitgliedschaft erforderlich.`
@@ -489,7 +720,7 @@ export function processContributions(members: Member[]): ContributionResult {
 
       const isResignedOrDeceased = isInactiveMember(m);
       const isHonorary = isHonoraryMember(m);
-      const isChildByStatus = m.status === 'child';
+      const isChildByStatus = isChildOrYouthStatus(m.status);
       const isUnder18 = m.age !== null ? m.age < 18 : isChildByStatus;
 
       if (isResignedOrDeceased) {
@@ -508,15 +739,19 @@ export function processContributions(members: Member[]): ContributionResult {
           } else if (isUnder18) {
             fee = 0;
             reason = 'Jugendlicher unter 18 beitragsfrei';
-          } else if (m.status === 'active') {
+          } else if (m.status === 'active' || isActiveStatus(m.status)) {
             fee = 25.0;
-            reason = 'Erwachsener aktiv (25 €)';
-          } else if (m.status === 'passive') {
+            reason = m.status === 'active'
+              ? 'Erwachsener aktiv (25 €)'
+              : `Erwachsener aktiv (${getMemberStatusLabel(m.status)}) (25 €)`;
+          } else if (m.status === 'passive' || isPassiveStatus(m.status)) {
             fee = 12.0;
-            reason = 'Erwachsener passiv (12 €)';
+            reason = m.status === 'passive'
+              ? 'Erwachsener passiv (12 €)'
+              : `Erwachsener passiv (${getMemberStatusLabel(m.status)}) (12 €)`;
           } else {
             fee = 12.0;
-            reason = `Status ${m.status} als passiv veranlagt (12 €)`;
+            reason = `Status ${getMemberStatusLabel(m.status)} als passiv veranlagt (12 €)`;
           }
         }
       } else {
@@ -527,7 +762,7 @@ export function processContributions(members: Member[]): ContributionResult {
           fee = 0;
           reason = 'Kind/Jugendlicher unter 18 beitragsfrei';
         } else if (m.partner === payer.id || payer.partner === m.id) {
-          if (m.status === 'active') {
+          if (m.status === 'active' || isActiveStatus(m.status)) {
             fee = 10.0;
             reason = 'Aktiver Lebenspartner (+10 €)';
           } else {
@@ -535,7 +770,7 @@ export function processContributions(members: Member[]): ContributionResult {
             reason = 'Passiver Lebenspartner (im Familienbeitrag abgedeckt)';
           }
         } else if (m.age !== null && m.age < 25) {
-          if (m.status === 'active') {
+          if (m.status === 'active' || isActiveStatus(m.status)) {
             activeChildrenCount++;
             if (activeChildrenCount === 1) {
               fee = 10.0;
@@ -725,12 +960,16 @@ export function matchesStatusFilter(group: PayerGroup, filter: StatusFilterType)
 
     case 'active':
       // Hat mindestens ein aktives Mitglied, das nicht inaktiv (ausgetreten/verstorben) ist
-      return group.members.some(m => m.status === 'active' && !isInactiveMember(m));
+      return group.members.some(
+        m => (m.status === 'active' || isActiveStatus(m.status)) && !isInactiveMember(m)
+      );
 
     case 'passive':
       // Hat keine aktiven Mitglieder, sondern nur passive (oder beitragsfreie Kinder)
       return (
-        !group.members.some(m => m.status === 'active' && !isInactiveMember(m)) &&
+        !group.members.some(
+          m => (m.status === 'active' || isActiveStatus(m.status)) && !isInactiveMember(m)
+        ) &&
         group.members.some(m => !isInactiveMember(m))
       );
 
@@ -786,11 +1025,12 @@ export function matchesSearchQuery(group: PayerGroup, query: string): boolean {
     return true;
   }
 
-  // Prüfe Mitgliederangaben der Gruppe
+  // Prüfe Mitgliederangaben der Gruppe (inklusive Klarnamen des Status)
   return group.members.some(m =>
     m.fullName.toLowerCase().includes(q) ||
     m.id.toLowerCase().includes(q) ||
     m.status.toLowerCase().includes(q) ||
+    getMemberStatusLabel(m.status).toLowerCase().includes(q) ||
     (m.boardFunction && m.boardFunction.toLowerCase().includes(q)) ||
     (m.clubFunction && m.clubFunction.toLowerCase().includes(q)) ||
     (m.otherFunction && m.otherFunction.toLowerCase().includes(q)) ||

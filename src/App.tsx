@@ -33,6 +33,10 @@ import {
   filterPayerGroup,
   isHonoraryMember,
   isInactiveMember,
+  getMemberStatusLabel,
+  isActiveStatus,
+  isPassiveStatus,
+  isChildOrYouthStatus,
 } from './utils/sepaCalculator.ts';
 import { SAMPLE_CSV } from './utils/sampleData.ts';
 
@@ -623,7 +627,7 @@ export default function App(): React.JSX.Element {
                                 <td className="py-1.5 px-3 font-semibold text-[#261420]">{m.fullName}</td>
                                 <td className="py-1.5 px-3">
                                   <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-700">
-                                    {m.status}
+                                    {getMemberStatusLabel(m.status)}
                                   </span>
                                 </td>
                                 <td className="py-1.5 px-3 text-stone-600">
@@ -853,7 +857,7 @@ export default function App(): React.JSX.Element {
                                   Ehrenmitglied
                                 </span>
                               )}
-                              {group.members.some(m => m.status === 'active' && !isInactiveMember(m)) ? (
+                              {group.members.some(m => (m.status === 'active' || isActiveStatus(m.status)) && !isInactiveMember(m)) ? (
                                 <span className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
                                   Aktiv
                                 </span>
@@ -957,16 +961,18 @@ export default function App(): React.JSX.Element {
                                     <td className="py-2.5">
                                       <span
                                         className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold mr-1.5 ${
-                                          m.status === 'active'
+                                          isHonoraryMember(m)
+                                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                            : m.status === 'active' || isActiveStatus(m.status)
                                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                            : m.status === 'passive'
+                                            : m.status === 'passive' || isPassiveStatus(m.status)
                                             ? 'bg-stone-200 text-stone-700'
-                                            : m.status === 'child'
+                                            : isChildOrYouthStatus(m.status)
                                             ? 'bg-sky-100 text-sky-800'
-                                            : 'bg-rose-100 text-rose-700'
+                                            : 'bg-stone-100 text-stone-700'
                                         }`}
                                       >
-                                        {m.status}
+                                        {getMemberStatusLabel(m.status)}
                                       </span>
                                       <span className="text-stone-500">
                                         {m.age !== null ? `${m.age} J.` : 'Kein Datum'}

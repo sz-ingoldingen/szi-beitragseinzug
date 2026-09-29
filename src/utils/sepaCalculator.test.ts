@@ -12,6 +12,14 @@ import {
   matchesValidityFilter,
   matchesSearchQuery,
   filterPayerGroup,
+  MemberStatus,
+  MemberStatusEnum,
+  MEMBER_STATUS_LABELS,
+  getMemberStatusLabel,
+  isActiveStatus,
+  isPassiveStatus,
+  isChildOrYouthStatus,
+  isGuestStatus,
 } from './sepaCalculator';
 import { SAMPLE_CSV } from './sampleData';
 
@@ -1147,7 +1155,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(group.warnings.length).toBeGreaterThan(0);
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
       expect(singleWarning).toBeDefined();
-      expect(singleWarning).toContain('passiv / Sponsor');
+      expect(singleWarning).toContain('Ehrenmitglied');
     });
   });
 
@@ -1262,6 +1270,188 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
         filterPayerGroup(g, 'honorary', 'all', 'Huber')
       );
       expect(noneResult.length).toBe(0);
+    });
+  });
+
+  describe('MemberStatus Konstanten, Enums & Status-Klassifizierung (alle 26 Status-Codes)', () => {
+    it('definiert alle 26 Status-Codes in MemberStatus und MemberStatusEnum', () => {
+      const keys = Object.values(MemberStatus);
+      expect(keys.length).toBe(26);
+
+      // Prüfe Schlüssel aller 26 Status
+      expect(MemberStatus.PREMIUM).toBe('premium');
+      expect(MemberStatus.ACTIVE).toBe('active');
+      expect(MemberStatus.LIMITED).toBe('limited');
+      expect(MemberStatus.INFANT).toBe('infant');
+      expect(MemberStatus.CHILD).toBe('child');
+      expect(MemberStatus.TEEN).toBe('teen');
+      expect(MemberStatus.TWEN).toBe('twen');
+
+      expect(MemberStatus.PASSIVE).toBe('passive');
+      expect(MemberStatus.PPREM).toBe('pprem');
+      expect(MemberStatus.PLIMIT).toBe('plimit');
+      expect(MemberStatus.PINFANT).toBe('pinfant');
+      expect(MemberStatus.PKID).toBe('pkid');
+      expect(MemberStatus.PTEEN).toBe('pteen');
+      expect(MemberStatus.PTWEN).toBe('ptwen');
+      expect(MemberStatus.SENIOR).toBe('senior');
+
+      expect(MemberStatus.GUEST).toBe('guest');
+      expect(MemberStatus.GPREM).toBe('gprem');
+      expect(MemberStatus.GLIMIT).toBe('glimit');
+      expect(MemberStatus.GINFANT).toBe('ginfant');
+      expect(MemberStatus.GKID).toBe('gkid');
+      expect(MemberStatus.GTEEN).toBe('gteen');
+      expect(MemberStatus.GTWEN).toBe('gtwen');
+
+      expect(MemberStatus.SPONSOR).toBe('sponsor');
+      expect(MemberStatus.TEMP).toBe('temp');
+      expect(MemberStatus.RESIGNED).toBe('resigned');
+      expect(MemberStatus.DECEASED).toBe('deceased');
+
+      // MemberStatusEnum stimmt überein
+      expect(MemberStatusEnum.SPONSOR).toBe('sponsor');
+      expect(MemberStatusEnum.SENIOR).toBe('senior');
+      expect(MemberStatusEnum.TWEN).toBe('twen');
+    });
+
+    it('MEMBER_STATUS_LABELS enthält alle 26 Klarnamen aus der Vereinsverwaltung', () => {
+      expect(Object.keys(MEMBER_STATUS_LABELS).length).toBe(26);
+
+      // Aktive
+      expect(getMemberStatusLabel('premium')).toBe('Aktiv (50%)');
+      expect(getMemberStatusLabel('active')).toBe('Aktiv');
+      expect(getMemberStatusLabel('limited')).toBe('Aktiv (Limitiert)');
+      expect(getMemberStatusLabel('infant')).toBe('Kleinkind');
+      expect(getMemberStatusLabel('child')).toBe('Kind');
+      expect(getMemberStatusLabel('teen')).toBe('Jugend');
+      expect(getMemberStatusLabel('twen')).toBe('Jungaktiv');
+
+      // Passive
+      expect(getMemberStatusLabel('passive')).toBe('Passiv');
+      expect(getMemberStatusLabel('pprem')).toBe('Passiv (Premium)');
+      expect(getMemberStatusLabel('plimit')).toBe('Passiv (Limitiert)');
+      expect(getMemberStatusLabel('pinfant')).toBe('Passiv (Kleinkind)');
+      expect(getMemberStatusLabel('pkid')).toBe('Passiv (Kind)');
+      expect(getMemberStatusLabel('pteen')).toBe('Passiv (Jugend)');
+      expect(getMemberStatusLabel('ptwen')).toBe('Passiv (Jungaktiv)');
+      expect(getMemberStatusLabel('senior')).toBe('Rentner');
+
+      // Gäste
+      expect(getMemberStatusLabel('guest')).toBe('Gast');
+      expect(getMemberStatusLabel('gprem')).toBe('Gast (Premium)');
+      expect(getMemberStatusLabel('glimit')).toBe('Gast (Limitiert)');
+      expect(getMemberStatusLabel('ginfant')).toBe('Gast (Kleinkind)');
+      expect(getMemberStatusLabel('gkid')).toBe('Gast (Kind)');
+      expect(getMemberStatusLabel('gteen')).toBe('Gast (Jugend)');
+      expect(getMemberStatusLabel('gtwen')).toBe('Gast (Jungaktiv)');
+
+      // Sonderstatus
+      expect(getMemberStatusLabel('sponsor')).toBe('Ehrenmitglied');
+      expect(getMemberStatusLabel('temp')).toBe('Temporär');
+      expect(getMemberStatusLabel('resigned')).toBe('Ausgeschieden');
+      expect(getMemberStatusLabel('deceased')).toBe('Verstorben');
+    });
+
+    it('isActiveStatus klassifiziert Musiker / Aktive korrekt', () => {
+      expect(isActiveStatus('active')).toBe(true);
+      expect(isActiveStatus('premium')).toBe(true);
+      expect(isActiveStatus('limited')).toBe(true);
+      expect(isActiveStatus('twen')).toBe(true);
+      expect(isActiveStatus('teen')).toBe(true);
+      expect(isActiveStatus('child')).toBe(true);
+      expect(isActiveStatus('infant')).toBe(true);
+
+      expect(isActiveStatus('passive')).toBe(false);
+      expect(isActiveStatus('senior')).toBe(false);
+      expect(isActiveStatus('guest')).toBe(false);
+      expect(isActiveStatus('sponsor')).toBe(false);
+      expect(isActiveStatus('resigned')).toBe(false);
+    });
+
+    it('isPassiveStatus klassifiziert passive Mitglieder korrekt', () => {
+      expect(isPassiveStatus('passive')).toBe(true);
+      expect(isPassiveStatus('pprem')).toBe(true);
+      expect(isPassiveStatus('plimit')).toBe(true);
+      expect(isPassiveStatus('pinfant')).toBe(true);
+      expect(isPassiveStatus('pkid')).toBe(true);
+      expect(isPassiveStatus('pteen')).toBe(true);
+      expect(isPassiveStatus('ptwen')).toBe(true);
+      expect(isPassiveStatus('senior')).toBe(true);
+
+      expect(isPassiveStatus('active')).toBe(false);
+      expect(isPassiveStatus('twen')).toBe(false);
+      expect(isPassiveStatus('guest')).toBe(false);
+    });
+
+    it('isChildOrYouthStatus klassifiziert Kinder und Jugendliche korrekt', () => {
+      expect(isChildOrYouthStatus('infant')).toBe(true);
+      expect(isChildOrYouthStatus('child')).toBe(true);
+      expect(isChildOrYouthStatus('teen')).toBe(true);
+      expect(isChildOrYouthStatus('pinfant')).toBe(true);
+      expect(isChildOrYouthStatus('pkid')).toBe(true);
+      expect(isChildOrYouthStatus('pteen')).toBe(true);
+      expect(isChildOrYouthStatus('ginfant')).toBe(true);
+      expect(isChildOrYouthStatus('gkid')).toBe(true);
+      expect(isChildOrYouthStatus('gteen')).toBe(true);
+
+      expect(isChildOrYouthStatus('active')).toBe(false);
+      expect(isChildOrYouthStatus('twen')).toBe(false);
+      expect(isChildOrYouthStatus('passive')).toBe(false);
+      expect(isChildOrYouthStatus('senior')).toBe(false);
+    });
+
+    it('isGuestStatus klassifiziert Gäste korrekt', () => {
+      expect(isGuestStatus('guest')).toBe(true);
+      expect(isGuestStatus('gprem')).toBe(true);
+      expect(isGuestStatus('glimit')).toBe(true);
+      expect(isGuestStatus('ginfant')).toBe(true);
+      expect(isGuestStatus('gkid')).toBe(true);
+      expect(isGuestStatus('gteen')).toBe(true);
+      expect(isGuestStatus('gtwen')).toBe(true);
+
+      expect(isGuestStatus('active')).toBe(false);
+      expect(isGuestStatus('passive')).toBe(false);
+    });
+
+    it('isHonoraryMember erkennt Status "sponsor" sofort als beitragsfreies Ehrenmitglied (§ 1 Abs. 6)', () => {
+      const sponsorMember: Member = {
+        rowIndex: 1,
+        id: '5001',
+        firstName: 'Ehren',
+        lastName: 'Mann',
+        fullName: 'Ehren Mann',
+        status: MemberStatus.SPONSOR, // 'sponsor'
+        birthDate: '01.01.1950',
+        age: 76,
+        accountHolder: 'Ehren Mann',
+        iban: 'DE23100000001234567890',
+        bic: 'TESTDEDDXXX',
+        sepaMandate: 'MANDAT-EHREN',
+        signatureDate: '01.01.2020',
+        parent1: '0',
+        parent2: '0',
+        partner: '0',
+        famPayerFlag: '0',
+        famMemberFlag: '0',
+        boardFunction: '',
+        clubFunction: '',
+        otherFunction: '',
+        maskGroup: '',
+        danceGroup: '',
+        comment: '',
+        raw: [],
+      };
+
+      expect(isHonoraryMember(sponsorMember)).toBe(true);
+
+      const result = processContributions([sponsorMember]);
+      expect(result.payerGroups.length).toBe(1);
+      const group = result.payerGroups[0];
+      // Als Einzelzahler mit Status sponsor ist der Beitrag 0 €
+      expect(group.totalAmount).toBe(0.0);
+      expect(group.members[0].fee).toBe(0.0);
+      expect(group.members[0].reason).toContain('Beitragsfrei gem. § 1 Abs. 6');
     });
   });
 });
