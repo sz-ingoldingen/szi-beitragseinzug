@@ -670,11 +670,13 @@ export function processContributions(members: Member[]): ContributionResult {
     const groupMembers = group.members;
     const isMultiMember = groupMembers.length > 1;
     const hasFamilyFlag = groupMembers.some(m => m.famPayerFlag === '1' || m.famMemberFlag === '1');
-    const isFamily = isMultiMember || hasFamilyFlag;
 
-    // Prüfen, ob der Zahler als Familie abgerechnet wird (20 €), aber keine weiteren aktiven Angehörigen mehr hat
+    // Prüfen, ob neben dem Zahler noch weitere lebende/aktive Angehörige vorhanden sind
     const otherLivingMembers = groupMembers.filter(m => m.id !== payer.id && !isInactiveMember(m));
-    const isSingleFamilyPayer = isFamily && otherLivingMembers.length === 0;
+
+    // Alleinstehende Familienzahler (keine weiteren aktiven/lebenden Angehörigen) werden automatisch
+    // und ohne Rückfrage/Warnung auf Einzelzahler umgestellt.
+    const isFamily = (isMultiMember || hasFamilyFlag) && otherLivingMembers.length > 0;
 
     // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
     // Sie werden nicht in die aktiven Lastschriften aufgenommen
@@ -699,19 +701,6 @@ export function processContributions(members: Member[]): ContributionResult {
     if (!payer.signatureDate) {
       warnings.push('Unterschriftsdatum des Mandats fehlt.');
     }
-    if (isSingleFamilyPayer) {
-      let regularFee = '25,00 € (aktiv)';
-      if (isHonoraryMember(payer)) {
-        regularFee = '0,00 € (Ehrenmitglied beitragsfrei)';
-      } else if (payer.status === 'passive' || isPassiveStatus(payer.status)) {
-        regularFee = '12,00 € (passiv)';
-      } else if (payer.status !== 'active' && !isActiveStatus(payer.status)) {
-        regularFee = `12,00 € (${getMemberStatusLabel(payer.status)})`;
-      }
-      warnings.push(
-        `Alleinstehender Familienzahler: Keine weiteren aktiven Familienangehörigen zugeordnet (z. B. Angehörige ausgetreten oder ≥ 25 Jahre). Umstellung auf regulären Einzelbeitrag (${regularFee}) und neue Mitgliedschaft erforderlich.`
-      );
-    }
 
     groupMembers.forEach(m => {
       const isPayerSelf = m.id === payer.id;
@@ -729,9 +718,7 @@ export function processContributions(members: Member[]): ContributionResult {
       } else if (isPayerSelf) {
         if (isFamily) {
           fee = 20.0;
-          reason = isSingleFamilyPayer
-            ? 'Familienbeitrag (Zahler) – Hinweis: Keine weiteren Familienangehörigen zugeordnet (Umstellung auf Einzelbeitrag nötig)'
-            : 'Familienbeitrag (Zahler)';
+          reason = 'Familienbeitrag (Zahler)';
         } else {
           if (isHonorary) {
             fee = 0;

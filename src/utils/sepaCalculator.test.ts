@@ -427,11 +427,12 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(unassignedChild.issue).toContain('25 Jahre');
       expect(unassignedChild.issue).toContain('neue Mitgliedschaft');
 
-      // Zahler zahlt nur den Familienbeitrag für sich selbst (20 € gem. famPayerFlag)
+      // Zahler wird automatisch auf Einzelzahler umgestellt (passiv: 12 €)
       const group = result.payerGroups[0];
       expect(group.memberCount).toBe(1);
       expect(group.members.find(m => m.id === '1003')).toBeUndefined();
-      expect(group.totalAmount).toBe(20.0);
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(12.0);
     });
 
     it('Test 4: Familie mit 2 Kindern (Kind 1 wird 25, Kind 2 ist U18 z. B. 16 J., aktiv) -> Kind 2 bleibt beitragsfrei (0 €)', () => {
@@ -900,7 +901,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
   describe('Alleinstehende Familienzahler (keine weiteren Angehörigen vorhanden)', () => {
     const currentYear = new Date().getFullYear();
 
-    it('erzeugt Hinweis (Warnung) für aktiven Familienzahler ohne Angehörige (20 € berechnet, Umstellung auf 25 € nötig)', () => {
+    it('stellt aktiven Familienzahler ohne Angehörige automatisch auf Einzelzahler um (25 € berechnet, keine Warnung)', () => {
       const members: Member[] = [
         {
           rowIndex: 2,
@@ -936,18 +937,18 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
 
       const group = result.payerGroups[0];
       expect(group.memberCount).toBe(1);
-      expect(group.totalAmount).toBe(20.0); // Aktuell 20 €
-      expect(group.members[0].reason).toContain('Hinweis: Keine weiteren Familienangehörigen zugeordnet');
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(25.0); // Automatisch auf Einzelzahler (aktiv: 25 €) umgestellt
+      expect(group.members[0].fee).toBe(25.0);
+      expect(group.members[0].reason).toContain('Erwachsener aktiv');
 
-      // Warnung vorhanden
-      expect(group.warnings.length).toBeGreaterThan(0);
+      // Keine Warnung vorhanden
+      expect(group.warnings.length).toBe(0);
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
-      expect(singleWarning).toBeDefined();
-      expect(singleWarning).toContain('25,00 € (aktiv)');
-      expect(singleWarning).toContain('neue Mitgliedschaft erforderlich');
+      expect(singleWarning).toBeUndefined();
     });
 
-    it('erzeugt Hinweis (Warnung) für passiven Familienzahler ohne Angehörige (20 € berechnet, Umstellung auf 12 € nötig)', () => {
+    it('stellt passiven Familienzahler ohne Angehörige automatisch auf Einzelzahler um (12 € berechnet, keine Warnung)', () => {
       const members: Member[] = [
         {
           rowIndex: 2,
@@ -980,14 +981,17 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
 
       const result = processContributions(members);
       const group = result.payerGroups[0];
-      expect(group.totalAmount).toBe(20.0);
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(12.0); // Automatisch auf Einzelzahler (passiv: 12 €) umgestellt
+      expect(group.members[0].fee).toBe(12.0);
+      expect(group.members[0].reason).toContain('Erwachsener passiv');
 
+      expect(group.warnings.length).toBe(0);
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
-      expect(singleWarning).toBeDefined();
-      expect(singleWarning).toContain('12,00 € (passiv)');
+      expect(singleWarning).toBeUndefined();
     });
 
-    it('erzeugt Hinweis, wenn einzige Partnerin verstorben oder ausgetreten ist', () => {
+    it('stellt Zahler auf Einzelzahler um (25 €) ohne Warnung, wenn einzige Partnerin verstorben oder ausgetreten ist', () => {
       const members: Member[] = [
         {
           rowIndex: 2,
@@ -1048,12 +1052,20 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       const result = processContributions(members);
       const group = result.payerGroups[0];
 
-      // Zahler ist die einzige lebende Person in der Gruppe -> Warnung wird erzeugt
+      // Zahler ist die einzige lebende Person in der Gruppe -> Umstellung auf Einzelzahler (aktiv: 25 €)
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(25.0);
+      expect(group.members[0].fee).toBe(25.0);
+      expect(group.members[0].reason).toContain('Erwachsener aktiv');
+      expect(group.members[1].fee).toBe(0.0);
+
+      // Keine Warnung wegen alleistehendem Familienzahler
+      expect(group.warnings.length).toBe(0);
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
-      expect(singleWarning).toBeDefined();
+      expect(singleWarning).toBeUndefined();
     });
 
-    it('erzeugt Hinweis (Warnung) für Sponsor/Payer, dessen Töchter ausgetreten sind (auch wenn famPayerFlag 0 ist)', () => {
+    it('stellt Sponsor/Payer, dessen Töchter ausgetreten sind, automatisch auf Einzelzahler (0 €) ohne Warnung um', () => {
       const members: Member[] = [
         {
           rowIndex: 2,
@@ -1142,20 +1154,20 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(result.payerGroups.length).toBe(1);
 
       const group = result.payerGroups[0];
-      // Sponsor wurde als Familie gruppiert (3 Mitglieder, davon 2 ausgetreten) -> zahlt 20 €
-      expect(group.totalAmount).toBe(20.0);
-      expect(group.members[0].fee).toBe(20.0);
-      expect(group.members[0].reason).toContain('Hinweis: Keine weiteren Familienangehörigen zugeordnet');
+      // Sponsor wurde automatisch auf Einzelzahler umgestellt. Sponsor ist Ehrenmitglied -> 0 €
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(0.0);
+      expect(group.members[0].fee).toBe(0.0);
+      expect(group.members[0].reason).toContain('Beitragsfrei gem. § 1 Abs. 6');
 
       // Töchter sind mit 0 € erfasst
       expect(group.members[1].fee).toBe(0.0);
       expect(group.members[2].fee).toBe(0.0);
 
-      // Warnung MUSS vorhanden sein
-      expect(group.warnings.length).toBeGreaterThan(0);
+      // Keine Warnung vorhanden
+      expect(group.warnings.length).toBe(0);
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
-      expect(singleWarning).toBeDefined();
-      expect(singleWarning).toContain('Ehrenmitglied');
+      expect(singleWarning).toBeUndefined();
     });
   });
 
