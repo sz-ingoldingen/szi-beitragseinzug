@@ -25,6 +25,7 @@ import {
   isPassiveStatus,
   isChildOrYouthStatus,
   isGuestStatus,
+  maskIBAN,
 } from './sepaCalculator';
 import { SAMPLE_CSV } from './sampleData';
 
@@ -1251,7 +1252,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(valid.length).toBe(7); // Alle im Sample sind valid (keine IBAN-/Mandatsfehler)
 
       const issues = payerGroups.filter(g => matchesValidityFilter(g, 'issues'));
-      expect(issues.length).toBe(0); // Keine Fehler/Warnungen im SAMPLE_CSV
+      expect(issues.length).toBe(2); // Gruppen mit Lebenspartnern (10401, 10195) haben Prüfhinweis
     });
 
     it('matchesSearchQuery: findet Zahler nach Name, IBAN und Gruppenmitgliedern', () => {
@@ -1766,4 +1767,91 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(group.selectedForExport).toBe(true);
     });
   });
+
+  describe('Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat', () => {
+    it('erzeugt Warnung bei Lastschrifteinzug über das Mandat des Partners', () => {
+      const payer = createMember({
+        id: '6001',
+        firstName: 'Paul',
+        lastName: 'Payer',
+        fullName: 'Paul Payer',
+        iban: 'DE23100000001234567890',
+        bic: 'TESTDEDDXXX',
+        sepaMandate: 'MANDAT-6001',
+        signatureDate: '01.01.2020',
+        status: 'active',
+        partner: '6002',
+        famPayerFlag: '1',
+      });
+      const partner = createMember({
+        id: '6002',
+        firstName: 'Paula',
+        lastName: 'Partner',
+        fullName: 'Paula Partner',
+        iban: '',
+        bic: '',
+        sepaMandate: '',
+        signatureDate: '',
+        status: 'active',
+        partner: '6001',
+        famMemberFlag: '1',
+      });
+
+      const result = processContributions([payer, partner]);
+      const group = result.payerGroups[0];
+
+      expect(group.warnings.some(w =>
+        w.includes('Lebenspartner Paula Partner wird über das Mandat von Paul Payer eingezogen – Stammdaten/Verknüpfung prüfen.')
+      )).toBe(true);
+    });
+
+    it('erzeugt passenden Hinweis bei Rechnungszahlern mit Lebenspartner', () => {
+      const invoicePayer = createMember({
+        id: '6003',
+        firstName: 'Ralf',
+        lastName: 'Rechnung',
+        fullName: 'Ralf Rechnung',
+        iban: 'Per Rechnung',
+        status: 'active',
+        partner: '6004',
+        famPayerFlag: '1',
+      });
+      const invoicePartner = createMember({
+        id: '6004',
+        firstName: 'Rita',
+        lastName: 'Rechnung',
+        fullName: 'Rita Rechnung',
+        iban: '',
+        status: 'active',
+        partner: '6003',
+        famMemberFlag: '1',
+      });
+
+      const result = processContributions([invoicePayer, invoicePartner]);
+      const group = result.payerGroups[0];
+
+      expect(group.warnings.some(w =>
+        w.includes('Lebenspartner Rita Rechnung wird über die Rechnung von Ralf Rechnung abgerechnet – Stammdaten/Verknüpfung prüfen.')
+      )).toBe(true);
+    });
+  });
+
+  describe('Datenschutz & IBAN-Maskierung (maskIBAN)', () => {
+    it('maskiert Standard-IBANs unter Beibehaltung von Prefix und Suffix', () => {
+      expect(maskIBAN('DE23100000001234567890')).toBe('DE23 •••• •••• 7890');
+      expect(maskIBAN('DE23 1000 0000 1234 5678 90')).toBe('DE23 •••• •••• 7890');
+    });
+
+    it('maskiert ausländische IBANs korrekt', () => {
+      expect(maskIBAN('AT611904300234573201')).toBe('AT61 •••• •••• 3201');
+    });
+
+    it('belässt Rechnungszahler und kurze Strings unmaskiert', () => {
+      expect(maskIBAN('Per Rechnung')).toBe('Per Rechnung');
+      expect(maskIBAN('')).toBe('');
+      expect(maskIBAN('DE12')).toBe('DE12');
+    });
+  });
 });
+
+

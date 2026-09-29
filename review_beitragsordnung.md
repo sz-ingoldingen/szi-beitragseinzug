@@ -75,9 +75,9 @@ BOM-Zeichen (`\uFEFF`) beim Import automatisch am Zeilenanfang strippen, falls C
 
 ---
 
-### G7: SEPA-XML vs. SEPA-CSV
+### G7: SEPA-XML vs. SEPA-CSV (Geklärt)
 
-Prüfen, ob die Hausbank neben der 7-spaltigen SEPA-CSV perspektivisch ein SEPA-XML (pain.008) Format benötigt.
+> **Entscheidung:** Die 7-spaltige SEPA-CSV wird von der Hausbank/Software direkt verarbeitet. Ein SEPA-XML (`pain.008`) ist nicht erforderlich.
 
 ---
 
@@ -93,19 +93,20 @@ Prüfen, ob die Hausbank neben der 7-spaltigen SEPA-CSV perspektivisch ein SEPA-
 - [x] **Stichtagslogik 15.04. (G8):** Altersberechnung (Kind < 18, Kind < 25) und Einzugsdatum fest auf den 15.04. des Beitragsjahres gelegt.
 - [x] **Ehrenmitglieder aus Familie herauslösen (G1 / G6):** Ehrenmitglied zahlt immer 0 €, Familie erhält Hinweis wenn Zahler Ehrenmitglied ist.
 - [x] **Rechnungszahler erkennen (L1):** IBAN *„Per Rechnung“* als Rechnungszahler geführt, kein Fehler, vom SEPA-Export ausgeschlossen und Filterbutton im Dashboard.
+- [x] **Lebenspartner-Prüfhinweis (G3 / TODO-1):** Gelber Prüfhinweis beim Zahler für mitabgebuchte Partner ohne eigenes Mandat.
+- [x] **BOM-Zeichen & Encoding (G5 / TODO-2):** BOM-Stripping (`\uFEFF`) und ArrayBuffer-Kodierungserkennung (UTF-8 / ISO-8859-1).
 - [x] **Warnung Status `child` (L6):** Warnung erzeugen, wenn `status === 'child'` / `pkid`, aber Alter zum 15.04. bereits $\ge 18$ Jahre ist.
 - [x] **Nicht-deutsche IBANs (F3):** Internationaler MOD 97-Check, Warnung statt Fehler bei Nicht-DE-IBANs.
+- [x] **SEPA-Exportformat (G7 / TODO-3):** 7-spaltige SEPA-CSV als Standard festgelegt; kein SEPA-XML pain.008 notwendig.
 
-### Offene Punkte (Nice-to-have / Zukunftssicherheit)
-- [ ] **TODO-1:** Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat verfeinern.
-- [ ] **TODO-2:** BOM-Zeichen (`\uFEFF`) beim CSV-Import automatisch entfernen.
-- [ ] **TODO-3:** Klärung mit Hausbank bzgl. SEPA-XML (pain.008) vs. SEPA-CSV.
+### Offene Punkte
+*Alle fachlichen TODOs aus dem Beitragsordnungs-Review sind erfolgreich abgeschlossen.*
 
 ---
 
 ## Architektur-Anmerkungen
 
-1. **Monolithische App.tsx:** Die UI kann bei weiterem Wachstum in modulare Komponenten aufgeteilt werden (`PayerTable`, `FilterBar`, `KPICards`, `UnassignedPanel`).
-2. **Keine Persistenz:** LocalStorage für zuletzt hochgeladene CSV oder Filterauswahl wäre ein nützlicher Quick-Win.
-3. **IBAN im Klartext im UI:** Maskierung der IBAN (z. B. `DE14...8888`) mit Tooltip für besseren Datenschutz bei Bildschirmfreigaben.
+1. **UI-Modularisierung:** ✅ Vollständig umgesetzt (`Header`, `UploadCard`, `KpiCards`, `FilterBar`, `UnassignedPanel`, `InactivePanel`, `PayerTable`, `ExportBar` unter `src/components/`).
+2. **Keine Persistenz (DSGVO-Entscheidung):** ✅ Bestätigt: Keine Speicherung im Browser-LocalStorage; flüchtige RAM-Verarbeitung schützt sensible Bank- und Mitgliedsdaten.
+3. **Datenschutz & IBAN-Maskierung im UI:** ✅ Umgesetzt (Datenschutzmodus mit Maskierung `DE23 •••• •••• 7890` und Einzelaufdeckung).
 4. **Export-Auswahl:** Filterleiste bietet Status-, Gültigkeits- und Textfilter; automatische Selektion beschränkt sich korrekt auf valide Lastschriften > 0 € (ohne Rechnungszahler).

@@ -322,6 +322,21 @@ export function isValidIBAN(iban: string): boolean {
 }
 
 /**
+ * Maskiert eine IBAN aus Datenschutzgründen (z. B. für Beamer-Präsentationen oder Screenshots).
+ * Zeigt die ersten 4 Zeichen (Ländercode & Prüfziffer) und die letzten 4 Ziffern an.
+ * Beispiel: DE23100000001234567890 -> DE23 •••• •••• 7890
+ */
+export function maskIBAN(iban: string): string {
+  if (!iban) return '';
+  const clean = iban.trim().replace(/\s+/g, '');
+  if (isInvoicePayer(clean)) return iban;
+  if (clean.length <= 8) return clean;
+  const start = clean.slice(0, 4);
+  const end = clean.slice(-4);
+  return `${start} •••• •••• ${end}`;
+}
+
+/**
  * Standard-Stichtag für Altersberechnungen (15. April des aktuellen bzw. angegebenen Jahres, analog Aufnahmeantrag).
  */
 export const DEFAULT_CUTOFF_DAY = 15;
@@ -486,7 +501,9 @@ export function isInactiveMember(member: Member): boolean {
  * Parst die Roh-CSV und überführt die Zeilen in ein typisiertes Format.
  */
 export function parseMembersCSV(csvText: string, referenceDate: Date = getDefaultCutoffDate()): Member[] {
-  const result = Papa.parse<string[]>(csvText.trim(), {
+  // BOM (Byte Order Mark, \uFEFF) am Anfang entfernen
+  const cleanCsv = csvText.replace(/^\uFEFF/, '').trim();
+  const result = Papa.parse<string[]>(cleanCsv, {
     header: false,
     skipEmptyLines: true,
   });
@@ -495,7 +512,7 @@ export function parseMembersCSV(csvText: string, referenceDate: Date = getDefaul
     throw new Error('Die CSV-Datei enthält keine ausreichenden Datenzeilen.');
   }
 
-  const headerRow = result.data[0].map(h => (h || '').trim());
+  const headerRow = result.data[0].map(h => (h || '').replace(/^\uFEFF/, '').trim());
   const rows = result.data.slice(1);
 
   let parent1Idx = -1;
@@ -780,6 +797,22 @@ export function processContributions(members: Member[]): ContributionResult {
         warnings.push(
           `Mitglied ${m.fullName} (${m.id}) hat Status „${getMemberStatusLabel(m.status)}“, ist aber zum Stichtag (15.04.) bereits ${m.age} Jahre alt (Stammdaten prüfen).`
         );
+      }
+    });
+
+    // Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat
+    nonHonoraryOtherLiving.forEach(m => {
+      const isPartner = m.partner === payer.id || payer.partner === m.id;
+      if (isPartner) {
+        if (isInvoice) {
+          warnings.push(
+            `Lebenspartner ${m.fullName} wird über die Rechnung von ${payer.fullName} abgerechnet – Stammdaten/Verknüpfung prüfen.`
+          );
+        } else {
+          warnings.push(
+            `Lebenspartner ${m.fullName} wird über das Mandat von ${payer.fullName} eingezogen – Stammdaten/Verknüpfung prüfen.`
+          );
+        }
       }
     });
 
