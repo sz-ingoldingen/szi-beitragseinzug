@@ -14,6 +14,9 @@ import {
   RefreshCw,
   Euro,
   Info,
+  Award,
+  ListFilter,
+  RotateCcw,
 } from 'lucide-react';
 import {
   parseMembersCSV,
@@ -23,14 +26,21 @@ import {
   PayerGroup,
   UnassignedMember,
   InactiveMember,
+  StatusFilterType,
+  ValidityFilterType,
+  matchesStatusFilter,
+  matchesValidityFilter,
+  filterPayerGroup,
+  isHonoraryMember,
+  isInactiveMember,
 } from './utils/sepaCalculator.ts';
 import { SAMPLE_CSV } from './utils/sampleData.ts';
 
 export default function App(): React.JSX.Element {
   const [, setCsvContent] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'passive'>('all');
-  const [validityFilter, setValidityFilter] = useState<'all' | 'valid' | 'issues'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
+  const [validityFilter, setValidityFilter] = useState<ValidityFilterType>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [purpose, setPurpose] = useState<string>('Mitgliedsbeitrag Schalmeienzug Ingoldingen e.V');
   const [expandedPayers, setExpandedPayers] = useState<Set<string>>(new Set());
@@ -101,36 +111,45 @@ export default function App(): React.JSX.Element {
   };
 
   const handleSelectAll = (select: boolean) => {
+    const filteredIds = new Set(filteredPayerGroups.map(g => g.payerId));
     setPayerGroupsState(prev =>
-      prev.map(g => ({ ...g, selectedForExport: select && g.isValid && g.totalAmount > 0 }))
+      prev.map(g => {
+        if (filteredIds.has(g.payerId)) {
+          return { ...g, selectedForExport: select && g.isValid && g.totalAmount > 0 };
+        }
+        return g;
+      })
     );
   };
 
   const filteredPayerGroups = useMemo(() => {
-    return payerGroupsState.filter(group => {
-      if (validityFilter === 'valid' && !group.isValid) return false;
-      if (validityFilter === 'issues' && group.isValid && group.warnings.length === 0) return false;
-
-      const hasActive = group.members.some(m => m.status === 'active');
-      const allPassive = group.members.every(m => m.status === 'passive' || m.status === 'child' || m.status === 'resigned');
-      if (statusFilter === 'active' && !hasActive) return false;
-      if (statusFilter === 'passive' && !allPassive) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesPayer =
-          group.payerName.toLowerCase().includes(q) ||
-          group.iban.toLowerCase().includes(q) ||
-          group.payerId.includes(q);
-        const matchesMembers = group.members.some(m =>
-          m.fullName.toLowerCase().includes(q) || m.id.includes(q)
-        );
-        if (!matchesPayer && !matchesMembers) return false;
-      }
-
-      return true;
-    });
+    return payerGroupsState.filter(group =>
+      filterPayerGroup(group, statusFilter, validityFilter, searchQuery)
+    );
   }, [payerGroupsState, validityFilter, statusFilter, searchQuery]);
+
+  const filterCounts = useMemo(() => {
+    return {
+      all: payerGroupsState.length,
+      active: payerGroupsState.filter(g => matchesStatusFilter(g, 'active')).length,
+      passive: payerGroupsState.filter(g => matchesStatusFilter(g, 'passive')).length,
+      honorary: payerGroupsState.filter(g => matchesStatusFilter(g, 'honorary')).length,
+      family: payerGroupsState.filter(g => matchesStatusFilter(g, 'family')).length,
+      single: payerGroupsState.filter(g => matchesStatusFilter(g, 'single')).length,
+      free: payerGroupsState.filter(g => matchesStatusFilter(g, 'free')).length,
+      valid: payerGroupsState.filter(g => matchesValidityFilter(g, 'valid')).length,
+      issues: payerGroupsState.filter(g => matchesValidityFilter(g, 'issues')).length,
+    };
+  }, [payerGroupsState]);
+
+  const isAnyFilterActive =
+    statusFilter !== 'all' || validityFilter !== 'all' || searchQuery.trim() !== '';
+
+  const handleResetFilters = () => {
+    setStatusFilter('all');
+    setValidityFilter('all');
+    setSearchQuery('');
+  };
 
   const stats = useMemo(() => {
     const selected = payerGroupsState.filter(g => g.selectedForExport);
@@ -262,9 +281,13 @@ export default function App(): React.JSX.Element {
           </div>
         ) : (
           <>
-            {/* KPI Cards */}
+            {/* KPI Cards (Interaktiv) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-[#9565C8]">
+              <div
+                onClick={() => { setStatusFilter('all'); setValidityFilter('all'); }}
+                className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-[#9565C8] cursor-pointer hover:shadow-md transition-shadow select-none"
+                title="Klicken, um alle Lastschriften anzuzeigen"
+              >
                 <div>
                   <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
                     Gesamteinzugssumme
@@ -281,7 +304,11 @@ export default function App(): React.JSX.Element {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-[#EFC415]">
+              <div
+                onClick={() => { setStatusFilter('all'); setValidityFilter('all'); }}
+                className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-[#EFC415] cursor-pointer hover:shadow-md transition-shadow select-none"
+                title="Klicken, um alle anzuzeigen"
+              >
                 <div>
                   <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
                     Erfasste Personen
@@ -298,7 +325,13 @@ export default function App(): React.JSX.Element {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-emerald-600">
+              <div
+                onClick={() => setStatusFilter(statusFilter === 'free' ? 'all' : 'free')}
+                className={`bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-emerald-600 cursor-pointer hover:shadow-md transition-all select-none ${
+                  statusFilter === 'free' ? 'ring-2 ring-emerald-500 bg-emerald-50/20' : ''
+                }`}
+                title="Klicken, um nach beitragsfreien Zahlern (0 €) zu filtern"
+              >
                 <div>
                   <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
                     Beitragsfrei
@@ -315,7 +348,13 @@ export default function App(): React.JSX.Element {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-amber-500">
+              <div
+                onClick={() => setValidityFilter(validityFilter === 'issues' ? 'all' : 'issues')}
+                className={`bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-all select-none ${
+                  validityFilter === 'issues' ? 'ring-2 ring-amber-500 bg-amber-50/20' : ''
+                }`}
+                title="Klicken, um nach Prüfhinweisen zu filtern"
+              >
                 <div>
                   <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
                     Prüfhinweise
@@ -346,88 +385,36 @@ export default function App(): React.JSX.Element {
                   <Search className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
                   <input
                     type="text"
-                    placeholder="Suche nach Name, Mitgliedsnummer, IBAN..."
+                    placeholder="Suche nach Name, Mitgliedsnummer, IBAN, Funktion..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 border border-stone-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#9565C8] focus:border-transparent bg-stone-50/50"
+                    className="w-full pl-9 pr-8 py-2 border border-stone-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#9565C8] focus:border-transparent bg-stone-50/50"
                   />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex rounded-xl bg-stone-100 p-1 text-xs font-medium border border-stone-200">
+                  {searchQuery && (
                     <button
                       type="button"
-                      onClick={() => setStatusFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        statusFilter === 'all'
-                          ? 'bg-[#261420] text-white shadow-sm'
-                          : 'text-stone-700 hover:text-stone-900'
-                      }`}
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-600 text-xs font-bold"
+                      title="Suche leeren"
                     >
-                      Alle Status
+                      ✕
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('active')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        statusFilter === 'active'
-                          ? 'bg-[#9565C8] text-white shadow-sm'
-                          : 'text-stone-700 hover:text-stone-900'
-                      }`}
-                    >
-                      Mit Aktiven
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('passive')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        statusFilter === 'passive'
-                          ? 'bg-stone-800 text-white shadow-sm'
-                          : 'text-stone-700 hover:text-stone-900'
-                      }`}
-                    >
-                      Nur Reine Passive
-                    </button>
-                  </div>
-
-                  <div className="flex rounded-xl bg-stone-100 p-1 text-xs font-medium border border-stone-200">
-                    <button
-                      type="button"
-                      onClick={() => setValidityFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        validityFilter === 'all'
-                          ? 'bg-[#261420] text-white shadow-sm'
-                          : 'text-stone-700 hover:text-stone-900'
-                      }`}
-                    >
-                      Alle Prüfungen
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setValidityFilter('valid')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        validityFilter === 'valid'
-                          ? 'bg-emerald-700 text-white shadow-sm'
-                          : 'text-stone-700 hover:text-stone-900'
-                      }`}
-                    >
-                      Gültig
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setValidityFilter('issues')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        validityFilter === 'issues'
-                          ? 'bg-amber-600 text-white shadow-sm'
-                          : 'text-stone-700 hover:text-stone-900'
-                      }`}
-                    >
-                      Mit Hinweisen
-                    </button>
-                  </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {isAnyFilterActive && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      className="text-xs text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 shadow-xs"
+                      title="Alle aktiven Filter und Suchbegriffe zurücksetzen"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Filter zurücksetzen</span>
+                    </button>
+                  )}
+
                   <label className="cursor-pointer bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold px-3 py-2 rounded-xl border border-stone-300 transition flex items-center gap-1.5">
                     <RefreshCw className="w-3.5 h-3.5 text-stone-600" />
                     <span>Andere Datei</span>
@@ -438,6 +425,92 @@ export default function App(): React.JSX.Element {
                       className="hidden"
                     />
                   </label>
+                </div>
+              </div>
+
+              {/* Status- & Beitragsart-Schnellfilter */}
+              <div className="pt-3 border-t border-stone-100 space-y-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  {/* Status / Tarif Filter Pills */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-semibold text-stone-500 mr-1 flex items-center gap-1">
+                      <ListFilter className="w-3.5 h-3.5 text-stone-400" />
+                      Status:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: 'all', label: 'Alle', count: filterCounts.all, activeStyle: 'bg-[#261420] text-white border-[#261420]' },
+                        { id: 'active', label: 'Aktiv', count: filterCounts.active, activeStyle: 'bg-[#9565C8] text-white border-[#9565C8]' },
+                        { id: 'passive', label: 'Passiv', count: filterCounts.passive, activeStyle: 'bg-stone-700 text-white border-stone-700' },
+                        { id: 'honorary', label: 'Ehrenmitglieder', count: filterCounts.honorary, activeStyle: 'bg-[#C69214] text-white border-[#A5780F]' },
+                        { id: 'family', label: 'Familienbeitrag', count: filterCounts.family, activeStyle: 'bg-[#7042A6] text-white border-[#7042A6]' },
+                        { id: 'single', label: 'Einzelzahler', count: filterCounts.single, activeStyle: 'bg-slate-700 text-white border-slate-700' },
+                        { id: 'free', label: 'Beitragsfrei (0 €)', count: filterCounts.free, activeStyle: 'bg-emerald-700 text-white border-emerald-700' },
+                      ].map(opt => {
+                        const isActive = statusFilter === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setStatusFilter(opt.id as StatusFilterType)}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isActive
+                                ? `${opt.activeStyle} shadow-sm`
+                                : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700 border-stone-200'
+                            }`}
+                          >
+                            <span>{opt.label}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-semibold ${
+                                isActive
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-stone-200 text-stone-600'
+                              }`}
+                            >
+                              {opt.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Prüf-Filter Pills */}
+                  <div className="flex items-center gap-1.5 flex-wrap lg:justify-end">
+                    <span className="text-xs font-semibold text-stone-500 mr-1">Prüfung:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: 'all', label: 'Alle', count: filterCounts.all, activeStyle: 'bg-[#261420] text-white border-[#261420]' },
+                        { id: 'valid', label: 'Gültig', count: filterCounts.valid, activeStyle: 'bg-emerald-700 text-white border-emerald-700' },
+                        { id: 'issues', label: 'Mit Hinweisen', count: filterCounts.issues, activeStyle: 'bg-amber-600 text-white border-amber-600' },
+                      ].map(opt => {
+                        const isActive = validityFilter === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setValidityFilter(opt.id as ValidityFilterType)}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isActive
+                                ? `${opt.activeStyle} shadow-sm`
+                                : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700 border-stone-200'
+                            }`}
+                          >
+                            <span>{opt.label}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-semibold ${
+                                isActive
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-stone-200 text-stone-600'
+                              }`}
+                            >
+                              {opt.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -708,6 +781,11 @@ export default function App(): React.JSX.Element {
                   />
                   <span className="text-xs font-bold text-stone-700 uppercase tracking-wider">
                     {filteredPayerGroups.length} Zahler / Lastschriften angezeigt
+                    {isAnyFilterActive && payerGroupsState.length !== filteredPayerGroups.length && (
+                      <span className="text-stone-400 font-normal ml-1">
+                        (von {payerGroupsState.length} gesamt)
+                      </span>
+                    )}
                   </span>
                 </div>
 
@@ -767,6 +845,26 @@ export default function App(): React.JSX.Element {
                               ) : (
                                 <span className="text-xs bg-stone-100 text-stone-600 border border-stone-200 px-2.5 py-0.5 rounded-full font-medium">
                                   Einzelzahler
+                                </span>
+                              )}
+                              {group.members.some(m => isHonoraryMember(m)) && (
+                                <span className="text-xs bg-amber-50 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shadow-2xs">
+                                  <Award className="w-3 h-3 text-[#C69214]" />
+                                  Ehrenmitglied
+                                </span>
+                              )}
+                              {group.members.some(m => m.status === 'active' && !isInactiveMember(m)) ? (
+                                <span className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+                                  Aktiv
+                                </span>
+                              ) : (
+                                <span className="text-xs bg-stone-100 text-stone-600 border border-stone-200 px-2 py-0.5 rounded-full font-medium">
+                                  Passiv
+                                </span>
+                              )}
+                              {group.totalAmount === 0 && (
+                                <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">
+                                  0,00 € (Frei)
                                 </span>
                               )}
                               {!group.isValid && (
@@ -893,8 +991,21 @@ export default function App(): React.JSX.Element {
                 })}
 
                 {filteredPayerGroups.length === 0 && (
-                  <div className="p-8 text-center text-stone-500 text-sm">
-                    Keine Zahler gefunden, die den gewählten Filtern entsprechen.
+                  <div className="p-10 text-center text-stone-500 text-sm">
+                    <p className="font-semibold text-stone-700 mb-1">Keine Zahler gefunden</p>
+                    <p className="text-xs text-stone-500 mb-3">
+                      Keine Datensätze entsprechen den aktuellen Filtereinstellungen.
+                    </p>
+                    {isAnyFilterActive && (
+                      <button
+                        type="button"
+                        onClick={handleResetFilters}
+                        className="text-xs bg-[#9565C8] hover:bg-[#824EBB] text-white px-3.5 py-1.5 rounded-xl font-medium shadow-sm transition inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Filter zurücksetzen</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

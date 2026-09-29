@@ -703,3 +703,113 @@ export function generateAuditCsv(
     delimiter: ';',
   });
 }
+
+export type StatusFilterType =
+  | 'all'
+  | 'active'
+  | 'passive'
+  | 'honorary'
+  | 'family'
+  | 'single'
+  | 'free';
+
+export type ValidityFilterType = 'all' | 'valid' | 'issues';
+
+/**
+ * Prüft, ob eine Zahlergruppe zum ausgewählten Status-Filter passt.
+ */
+export function matchesStatusFilter(group: PayerGroup, filter: StatusFilterType): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+
+    case 'active':
+      // Hat mindestens ein aktives Mitglied, das nicht inaktiv (ausgetreten/verstorben) ist
+      return group.members.some(m => m.status === 'active' && !isInactiveMember(m));
+
+    case 'passive':
+      // Hat keine aktiven Mitglieder, sondern nur passive (oder beitragsfreie Kinder)
+      return (
+        !group.members.some(m => m.status === 'active' && !isInactiveMember(m)) &&
+        group.members.some(m => !isInactiveMember(m))
+      );
+
+    case 'honorary':
+      // Mindestens ein Mitglied in der Gruppe ist Ehrenmitglied / beitragsbefreites Ehrenamt (§ 1 Abs. 6)
+      return group.members.some(m => isHonoraryMember(m));
+
+    case 'family':
+      // Familienbeitrag (Gruppe als Familie markiert bzw. Mehrpersonenverbund)
+      return group.isFamily;
+
+    case 'single':
+      // Einzelzahler
+      return !group.isFamily;
+
+    case 'free':
+      // Beitragsfrei (Gesamteinzugssumme 0,00 €)
+      return group.totalAmount === 0;
+
+    default:
+      return true;
+  }
+}
+
+/**
+ * Prüft, ob eine Zahlergruppe zum Gültigkeits-/Prüffilter passt.
+ */
+export function matchesValidityFilter(group: PayerGroup, filter: ValidityFilterType): boolean {
+  if (filter === 'valid') {
+    return group.isValid;
+  }
+  if (filter === 'issues') {
+    return !group.isValid || group.warnings.length > 0;
+  }
+  return true;
+}
+
+/**
+ * Prüft, ob eine Zahlergruppe mit der Suchanfrage übereinstimmt (Name, IBAN, BIC, Mandat, Mitgliedsdaten).
+ */
+export function matchesSearchQuery(group: PayerGroup, query: string): boolean {
+  if (!query || !query.trim()) return true;
+  const q = query.toLowerCase().trim();
+
+  // Prüfe Zahlerangaben
+  if (
+    group.payerName.toLowerCase().includes(q) ||
+    group.iban.toLowerCase().includes(q) ||
+    group.payerId.toLowerCase().includes(q) ||
+    (group.bic && group.bic.toLowerCase().includes(q)) ||
+    (group.mandate && group.mandate.toLowerCase().includes(q))
+  ) {
+    return true;
+  }
+
+  // Prüfe Mitgliederangaben der Gruppe
+  return group.members.some(m =>
+    m.fullName.toLowerCase().includes(q) ||
+    m.id.toLowerCase().includes(q) ||
+    m.status.toLowerCase().includes(q) ||
+    (m.boardFunction && m.boardFunction.toLowerCase().includes(q)) ||
+    (m.clubFunction && m.clubFunction.toLowerCase().includes(q)) ||
+    (m.otherFunction && m.otherFunction.toLowerCase().includes(q)) ||
+    (m.comment && m.comment.toLowerCase().includes(q))
+  );
+}
+
+/**
+ * Kombinierte Filterfunktion für Zahlergruppen.
+ */
+export function filterPayerGroup(
+  group: PayerGroup,
+  statusFilter: StatusFilterType,
+  validityFilter: ValidityFilterType,
+  searchQuery: string
+): boolean {
+  return (
+    matchesStatusFilter(group, statusFilter) &&
+    matchesValidityFilter(group, validityFilter) &&
+    matchesSearchQuery(group, searchQuery)
+  );
+}

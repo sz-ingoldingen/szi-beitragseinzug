@@ -8,6 +8,10 @@ import {
   processContributions,
   generateAuditCsv,
   Member,
+  matchesStatusFilter,
+  matchesValidityFilter,
+  matchesSearchQuery,
+  filterPayerGroup,
 } from './sepaCalculator';
 import { SAMPLE_CSV } from './sampleData';
 
@@ -1144,6 +1148,120 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       const singleWarning = group.warnings.find(w => w.includes('Alleinstehender Familienzahler'));
       expect(singleWarning).toBeDefined();
       expect(singleWarning).toContain('passiv / Sponsor');
+    });
+  });
+
+  describe('Filterlogik für Zahlergruppen (Status, Ehrenmitglieder, Familienbeitrag, etc.)', () => {
+    const members = parseMembersCSV(SAMPLE_CSV);
+    const { payerGroups } = processContributions(members);
+
+    it('StatusFilter "all": liefert alle Zahlergruppen zurück', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'all'));
+      expect(filtered.length).toBe(7);
+    });
+
+    it('StatusFilter "active": liefert Gruppen mit aktiven Mitgliedern (5 Zahler)', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'active'));
+      expect(filtered.length).toBe(5);
+      const payerIds = filtered.map(g => g.payerId);
+      expect(payerIds).toContain('10401'); // Mustermann (Familie mit Aktiven)
+      expect(payerIds).toContain('10195'); // Mustername (Familie mit aktiver Frau)
+      expect(payerIds).toContain('10501'); // Hans Huber (Aktiv)
+      expect(payerIds).toContain('10503'); // Markus Weber (Aktiv, 1. Vorstand)
+      expect(payerIds).toContain('10504'); // Anton Albrecht (Aktiv, Ehrenvorstand)
+      expect(payerIds).not.toContain('10502'); // Peter Schmidt (Reiner Passiver)
+      expect(payerIds).not.toContain('10505'); // Josef Maier (Reiner Passiver)
+    });
+
+    it('StatusFilter "passive": liefert nur reine passive Gruppen (2 Zahler)', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'passive'));
+      expect(filtered.length).toBe(2);
+      const payerIds = filtered.map(g => g.payerId);
+      expect(payerIds).toContain('10502'); // Peter Schmidt
+      expect(payerIds).toContain('10505'); // Josef Maier (Ehrenmitglied, passiv)
+    });
+
+    it('StatusFilter "honorary": liefert Gruppen mit Ehrenmitgliedern / beitragsbefreitem Ehrenamt (§ 1 Abs. 6)', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'honorary'));
+      expect(filtered.length).toBe(2);
+      const payerIds = filtered.map(g => g.payerId);
+      expect(payerIds).toContain('10504'); // Anton Albrecht (Ehrenvorstand)
+      expect(payerIds).toContain('10505'); // Josef Maier (Ehrenmitglied)
+      expect(payerIds).not.toContain('10503'); // Markus Weber (1. Vorstand ist regulär, nicht ehrenamtlich befreit)
+    });
+
+    it('StatusFilter "family": liefert Familienzahler (2 Gruppen)', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'family'));
+      expect(filtered.length).toBe(2);
+      const payerIds = filtered.map(g => g.payerId);
+      expect(payerIds).toContain('10401'); // Mustermann Max
+      expect(payerIds).toContain('10195'); // Mustername Mann
+      expect(payerIds).not.toContain('10501'); // Hans Huber (Einzelzahler)
+    });
+
+    it('StatusFilter "single": liefert Einzelzahler (5 Gruppen)', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'single'));
+      expect(filtered.length).toBe(5);
+      const payerIds = filtered.map(g => g.payerId);
+      expect(payerIds).toContain('10501');
+      expect(payerIds).toContain('10502');
+      expect(payerIds).toContain('10503');
+      expect(payerIds).toContain('10504');
+      expect(payerIds).toContain('10505');
+      expect(payerIds).not.toContain('10401');
+      expect(payerIds).not.toContain('10195');
+    });
+
+    it('StatusFilter "free": liefert beitragsfreie Lastschriften (0,00 €) zurück', () => {
+      const filtered = payerGroups.filter(g => matchesStatusFilter(g, 'free'));
+      expect(filtered.length).toBe(2);
+      const payerIds = filtered.map(g => g.payerId);
+      expect(payerIds).toContain('10504'); // Anton Albrecht (0 €)
+      expect(payerIds).toContain('10505'); // Josef Maier (0 €)
+      filtered.forEach(g => expect(g.totalAmount).toBe(0));
+    });
+
+    it('ValidityFilter: prüft Gültigkeit und Warnungen korrekt', () => {
+      const valid = payerGroups.filter(g => matchesValidityFilter(g, 'valid'));
+      expect(valid.length).toBe(7); // Alle im Sample sind valid (keine IBAN-/Mandatsfehler)
+
+      const issues = payerGroups.filter(g => matchesValidityFilter(g, 'issues'));
+      expect(issues.length).toBe(0); // Keine Fehler/Warnungen im SAMPLE_CSV
+    });
+
+    it('matchesSearchQuery: findet Zahler nach Name, IBAN und Gruppenmitgliedern', () => {
+      // Suche nach Name des Zahlers
+      expect(payerGroups.filter(g => matchesSearchQuery(g, 'Weber')).length).toBe(1);
+      // Suche nach Vorname des Zahlers
+      expect(payerGroups.filter(g => matchesSearchQuery(g, 'Markus')).length).toBe(1);
+      // Suche nach IBAN
+      expect(payerGroups.filter(g => matchesSearchQuery(g, 'DE89370400440532013000')).length).toBe(1);
+      // Suche nach Mitglied in Gruppe (Musterfrau ist Angehörige bei Max Mustermann 10401)
+      expect(payerGroups.filter(g => matchesSearchQuery(g, 'Musterfrau')).length).toBe(1);
+      // Suche nach Funktion (Ehrenvorstand)
+      expect(payerGroups.filter(g => matchesSearchQuery(g, 'Ehrenvorstand')).length).toBe(1);
+    });
+
+    it('filterPayerGroup: kombiniert Status, Gültigkeit und Suchbegriff', () => {
+      // Nur aktive Familienzahler mit Suchbegriff "Mustermann"
+      const result = payerGroups.filter(g =>
+        filterPayerGroup(g, 'family', 'all', 'Mustermann')
+      );
+      expect(result.length).toBe(1);
+      expect(result[0].payerId).toBe('10401');
+
+      // Ehrenmitglieder mit Suchbegriff "Maier"
+      const maierResult = payerGroups.filter(g =>
+        filterPayerGroup(g, 'honorary', 'all', 'Maier')
+      );
+      expect(maierResult.length).toBe(1);
+      expect(maierResult[0].payerId).toBe('10505');
+
+      // Ehrenmitglieder mit Suchbegriff "Huber" -> keine Treffer
+      const noneResult = payerGroups.filter(g =>
+        filterPayerGroup(g, 'honorary', 'all', 'Huber')
+      );
+      expect(noneResult.length).toBe(0);
     });
   });
 });
