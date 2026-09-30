@@ -39,8 +39,8 @@ export function KpiCards({
           <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
             Gesamteinzugssumme
           </div>
-          <div className="text-2xl font-bold text-[#261420] mt-1 font-mono">
-            {stats.totalEuro.toFixed(2).replace('.', ',')} €
+          <div className="text-2xl font-bold text-[#261420] mt-1 font-mono whitespace-nowrap">
+            {stats.totalEuro.toFixed(2).replace('.', ',')}&nbsp;€
           </div>
           <div className="text-xs text-stone-500 mt-0.5">
             {stats.selectedDebitsCount} Lastschriften aktiviert

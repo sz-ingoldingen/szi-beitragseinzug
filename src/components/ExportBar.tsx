@@ -23,8 +23,8 @@ export function ExportBar({
               {selectedDebitsCount} Lastschriften
             </span>{' '}
             ausgewählt • Summe:{' '}
-            <span className="text-[#EFC415] font-mono font-bold text-lg">
-              {totalEuro.toFixed(2).replace('.', ',')} €
+            <span className="text-[#EFC415] font-mono font-bold text-lg whitespace-nowrap">
+              {totalEuro.toFixed(2).replace('.', ',')}&nbsp;€
             </span>
           </div>
         </div>

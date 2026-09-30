@@ -131,8 +131,8 @@ export function PayerTable({
                 group.selectedForExport ? 'bg-white' : 'bg-stone-50/70 opacity-60'
               }`}
             >
-              <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div className="flex items-start md:items-center gap-3.5">
+              <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5 flex-1 min-w-0">
                   <input
                     type="checkbox"
                     checked={group.selectedForExport}
@@ -143,10 +143,10 @@ export function PayerTable({
                         ? 'Kein SEPA-Lastschrifteinzug (Selbstzahler)'
                         : 'Für SEPA-Lastschriftexport auswählen'
                     }
-                    className="w-4 h-4 mt-1 md:mt-0 rounded text-[#9565C8] focus:ring-[#9565C8] border-stone-300 cursor-pointer accent-[#9565C8] disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-4 h-4 mt-1 rounded text-[#9565C8] focus:ring-[#9565C8] border-stone-300 cursor-pointer accent-[#9565C8] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                   />
 
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-[#261420] text-base">
                         {group.payerName}
@@ -264,24 +264,24 @@ export function PayerTable({
                     </div>
 
                     {group.errors.length > 0 && (
-                      <div className="text-xs text-rose-600 font-medium mt-1">
+                      <div className="text-xs text-rose-600 font-medium mt-1.5 leading-relaxed break-words">
                         {group.errors.join(' ')}
                       </div>
                     )}
                     {group.warnings.length > 0 && (
-                      <div className="text-xs text-amber-700 mt-1">
+                      <div className="text-xs text-amber-700 mt-1.5 leading-relaxed break-words">
                         {group.warnings.join(' ')}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between md:justify-end gap-5 pl-7 md:pl-0">
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-[#261420] font-mono">
-                      {group.totalAmount.toFixed(2).replace('.', ',')} €
+                <div className="flex items-center justify-between md:justify-end gap-5 pl-7 md:pl-0 shrink-0">
+                  <div className="text-right shrink-0">
+                    <div className="text-xl font-bold text-[#261420] font-mono whitespace-nowrap">
+                      {group.totalAmount.toFixed(2).replace('.', ',')}&nbsp;€
                     </div>
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-stone-500 whitespace-nowrap">
                       {group.memberCount} {group.memberCount === 1 ? 'Person' : 'Personen'}
                     </div>
                   </div>
@@ -289,7 +289,7 @@ export function PayerTable({
                   <button
                     type="button"
                     onClick={() => onToggleExpand(group.payerId)}
-                    className="p-2 text-stone-400 hover:text-[#9565C8] hover:bg-[#F7F3FB] rounded-xl transition"
+                    className="p-2 text-stone-400 hover:text-[#9565C8] hover:bg-[#F7F3FB] rounded-xl transition shrink-0"
                     title="Details ein-/ausblenden"
                   >
                     {isExpanded ? (
@@ -351,8 +351,8 @@ export function PayerTable({
                               {m.boardFunction || m.otherFunction || m.clubFunction || '—'}
                             </td>
                             <td className="py-2.5 text-stone-600">{m.reason}</td>
-                            <td className="py-2.5 font-bold text-[#261420] text-right font-mono">
-                              {m.fee.toFixed(2).replace('.', ',')} €
+                            <td className="py-2.5 font-bold text-[#261420] text-right font-mono whitespace-nowrap">
+                              {m.fee.toFixed(2).replace('.', ',')}&nbsp;€
                             </td>
                           </tr>
                         ))}
