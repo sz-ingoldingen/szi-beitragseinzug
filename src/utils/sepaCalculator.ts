@@ -48,6 +48,7 @@ export interface PayerGroup {
   members: CalculatedMember[];
   isFamily: boolean;
   isInvoice?: boolean;
+  isStandingOrder?: boolean;
   errors: string[];
   warnings: string[];
   isValid: boolean;
@@ -70,7 +71,7 @@ export interface ContributionResult {
 }
 
 /**
- * Alle 26 möglichen Mitglieder-Status-Codes aus der Vereinsverwaltung (ClubDesk).
+ * Alle 26 möglichen Mitglieder-Status-Codes aus der Vereinsverwaltung (zunft.app).
  */
 export const MemberStatus = {
   // Aktive Mitglieder
@@ -294,6 +295,15 @@ export function isInvoicePayer(iban: string): boolean {
 }
 
 /**
+ * Prüft, ob ein IBAN-Feld den Vermerk "DAUERAUFTRAG" enthält (Selbstzahler via Dauerauftrag in zunft.app).
+ */
+export function isStandingOrderPayer(iban: string): boolean {
+  if (!iban) return false;
+  const clean = iban.toLowerCase().replace(/\s+/g, '');
+  return clean.includes('dauerauftrag');
+}
+
+/**
  * Validiert eine IBAN per Modulo 97 (ISO 7064).
  * Deutsche IBANs müssen genau 22 Zeichen lang sein und mit DE beginnen.
  * Bei ausländischen IBANs wird die internationale MOD-97-Prüfziffer validiert.
@@ -301,7 +311,7 @@ export function isInvoicePayer(iban: string): boolean {
 export function isValidIBAN(iban: string): boolean {
   if (!iban) return false;
   const clean = iban.replace(/\s+/g, '').toUpperCase();
-  if (isInvoicePayer(clean)) return true;
+  if (isInvoicePayer(clean) || isStandingOrderPayer(clean)) return true;
 
   if (clean.length < 15 || clean.length > 34) return false;
   if (clean.startsWith('DE') && clean.length !== 22) return false;
@@ -331,7 +341,7 @@ export function isValidIBAN(iban: string): boolean {
 export function maskIBAN(iban: string): string {
   if (!iban) return '';
   const clean = iban.trim().replace(/\s+/g, '');
-  if (isInvoicePayer(clean)) return iban;
+  if (isInvoicePayer(clean) || isStandingOrderPayer(clean)) return iban;
   if (clean.length <= 8) return clean;
   const start = clean.slice(0, 4);
   const end = clean.slice(-4);
@@ -543,7 +553,8 @@ export function parseMembersCSV(csvText: string, referenceDate: Date = getDefaul
 
     const accountHolder = getCol(r, 'Kontoinhaber', 21);
     const rawIban = getCol(r, 'IBAN', 22);
-    const iban = isInvoicePayer(rawIban) ? rawIban.trim() : rawIban.replace(/\s+/g, '').toUpperCase();
+    const isSpecialIban = isInvoicePayer(rawIban) || isStandingOrderPayer(rawIban);
+    const iban = isSpecialIban ? rawIban.trim() : rawIban.replace(/\s+/g, '').toUpperCase();
     const bic = getCol(r, 'BIC', 23).replace(/\s+/g, '').toUpperCase();
     const sepaMandate = getCol(r, 'SEPA-Mandat', 24);
     const signatureDate = getCol(r, 'Unterschriftsdatum', 25);
@@ -614,9 +625,10 @@ export function processContributions(members: Member[]): ContributionResult {
 
   members.forEach(m => {
     const isInvoice = isInvoicePayer(m.iban);
+    const isStandingOrder = isStandingOrderPayer(m.iban);
     const hasValidIban = m.iban.length > 0;
     const hasMandate = m.sepaMandate.length > 0 && m.sepaMandate.toLowerCase() !== 'n.a.';
-    if (isInvoice || (hasValidIban && hasMandate)) {
+    if (isInvoice || isStandingOrder || (hasValidIban && hasMandate)) {
       payers.push(m);
     } else {
       nonPayers.push(m);
@@ -794,10 +806,11 @@ export function processContributions(members: Member[]): ContributionResult {
 
     // Familienbeitrag (§ 2 Beitragsordnung):
     // Wird ausschließlich über die tatsächliche Zuordnung von Angehörigen bestimmt (Lebenspartner, Kinder unter 25).
-    // Das ClubDesk-Flag "Familienbeitrag (Zahler)" wird nicht mehr herangezogen.
+    // Das zunft.app-Flag "Familienbeitrag (Zahler)" wird nicht mehr herangezogen.
     // Ein Verbund ist eine Familie, wenn neben dem Zahler mindestens ein weiteres lebendes,
     // nicht-ehrenamtliches Angehörigenmitglied zugeordnet ist.
     const isFamily = !isPayerHonorary && nonHonoraryOtherLiving.length > 0;
+    const isStandingOrder = isStandingOrderPayer(payer.iban);
 
     // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
     // Sie werden nicht in die aktiven Lastschriften aufgenommen
@@ -910,6 +923,8 @@ export function processContributions(members: Member[]): ContributionResult {
     if (totalAmount > 0) {
       if (isInvoice) {
         warnings.push('Zahlungsart: Per Rechnung (Selbstzahler, kein SEPA-Einzug).');
+      } else if (isStandingOrder) {
+        warnings.push('Zahlungsart: Dauerauftrag (Selbstzahler, kein SEPA-Einzug).');
       } else {
         if (!payer.iban) {
           errors.push('IBAN fehlt beim Zahler.');
@@ -987,10 +1002,11 @@ export function processContributions(members: Member[]): ContributionResult {
       members: memberDetails,
       isFamily,
       isInvoice,
+      isStandingOrder,
       errors,
       warnings,
       isValid: errors.length === 0,
-      selectedForExport: errors.length === 0 && totalAmount > 0 && !isInvoice,
+      selectedForExport: errors.length === 0 && totalAmount > 0 && !isInvoice && !isStandingOrder,
     });
   });
 
@@ -1016,7 +1032,7 @@ export function generateSepaCsv(payerGroups: PayerGroup[], purpose = 'Mitgliedsb
   ];
 
   const rows = payerGroups
-    .filter(g => g.selectedForExport && g.totalAmount > 0 && !g.isInvoice)
+    .filter(g => g.selectedForExport && g.totalAmount > 0 && !g.isInvoice && !g.isStandingOrder)
     .map(g => [
       g.payerName,
       g.iban,
@@ -1125,7 +1141,8 @@ export type StatusFilterType =
   | 'family'
   | 'single'
   | 'free'
-  | 'invoice';
+  | 'invoice'
+  | 'standingOrder';
 
 export type ValidityFilterType = 'all' | 'valid' | 'issues';
 
@@ -1171,6 +1188,10 @@ export function matchesStatusFilter(group: PayerGroup, filter: StatusFilterType)
     case 'invoice':
       // Rechnungszahler (Selbstzahler außerhalb SEPA)
       return Boolean(group.isInvoice);
+
+    case 'standingOrder':
+      // Dauerauftrag (Selbstzahler außerhalb SEPA)
+      return Boolean(group.isStandingOrder);
 
     default:
       return true;

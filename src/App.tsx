@@ -130,7 +130,11 @@ export default function App(): React.JSX.Element {
     setPayerGroupsState(prev =>
       prev.map(g => {
         if (filteredIds.has(g.payerId)) {
-          return { ...g, selectedForExport: select && g.isValid && g.totalAmount > 0 && !g.isInvoice };
+          return {
+            ...g,
+            selectedForExport:
+              select && g.isValid && g.totalAmount > 0 && !g.isInvoice && !g.isStandingOrder,
+          };
         }
         return g;
       })
@@ -167,6 +171,7 @@ export default function App(): React.JSX.Element {
       single: payerGroupsState.filter(g => matchesStatusFilter(g, 'single')).length,
       free: payerGroupsState.filter(g => matchesStatusFilter(g, 'free')).length,
       invoice: payerGroupsState.filter(g => matchesStatusFilter(g, 'invoice')).length,
+      standingOrder: payerGroupsState.filter(g => matchesStatusFilter(g, 'standingOrder')).length,
       valid: payerGroupsState.filter(g => matchesValidityFilter(g, 'valid')).length,
       issues: payerGroupsState.filter(g => matchesValidityFilter(g, 'issues')).length,
     };

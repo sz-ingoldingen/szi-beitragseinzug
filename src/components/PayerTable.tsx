@@ -8,6 +8,7 @@ import {
   Award,
   AlertTriangle,
   XCircle,
+  Repeat,
 } from 'lucide-react';
 import {
   PayerGroup,
@@ -135,8 +136,14 @@ export function PayerTable({
                   <input
                     type="checkbox"
                     checked={group.selectedForExport}
+                    disabled={group.isInvoice || group.isStandingOrder}
                     onChange={() => onTogglePayerSelection(group.payerId)}
-                    className="w-4 h-4 mt-1 md:mt-0 rounded text-[#9565C8] focus:ring-[#9565C8] border-stone-300 cursor-pointer accent-[#9565C8]"
+                    title={
+                      group.isInvoice || group.isStandingOrder
+                        ? 'Kein SEPA-Lastschrifteinzug (Selbstzahler)'
+                        : 'Für SEPA-Lastschriftexport auswählen'
+                    }
+                    className="w-4 h-4 mt-1 md:mt-0 rounded text-[#9565C8] focus:ring-[#9565C8] border-stone-300 cursor-pointer accent-[#9565C8] disabled:opacity-40 disabled:cursor-not-allowed"
                   />
 
                   <div>
@@ -159,6 +166,12 @@ export function PayerTable({
                       {group.isInvoice && (
                         <span className="text-xs bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full font-semibold">
                           Per Rechnung
+                        </span>
+                      )}
+                      {group.isStandingOrder && (
+                        <span className="text-xs bg-sky-100 text-sky-900 border border-sky-300 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <Repeat className="w-3 h-3 text-sky-600" />
+                          Dauerauftrag
                         </span>
                       )}
                       {group.members.some(m => isHonoraryMember(m)) && (
@@ -196,7 +209,12 @@ export function PayerTable({
                     </div>
 
                     <div className="text-xs text-stone-500 flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 font-mono">
-                      {group.isInvoice ? (
+                      {group.isStandingOrder ? (
+                        <span className="font-sans text-sky-800 font-semibold bg-sky-50 px-2 py-0.5 rounded border border-sky-200 flex items-center gap-1.5">
+                          <Repeat className="w-3.5 h-3.5 text-sky-600" />
+                          Zahlungsweg: Dauerauftrag (Selbstzahler, kein SEPA-Lastschrifteinzug)
+                        </span>
+                      ) : group.isInvoice ? (
                         <span className="font-sans text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                           Zahlungsweg: Per Rechnung (Selbstzahler, kein SEPA-Lastschrifteinzug)
                         </span>

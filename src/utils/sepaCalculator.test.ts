@@ -11,6 +11,7 @@ import {
   calculateAge,
   getDefaultCutoffDate,
   isInvoicePayer,
+  isStandingOrderPayer,
   isValidIBAN,
   Member,
   matchesStatusFilter,
@@ -1824,6 +1825,112 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
     });
   });
 
+  describe('Dauerauftragszahler (IBAN "DAUERAUFTRAG" & Ausschluss aus SEPA)', () => {
+    it('isStandingOrderPayer erkennt verschiedene Schreibweisen von "DAUERAUFTRAG"', () => {
+      expect(isStandingOrderPayer('DAUERAUFTRAG')).toBe(true);
+      expect(isStandingOrderPayer('Dauerauftrag')).toBe(true);
+      expect(isStandingOrderPayer('dauerauftrag')).toBe(true);
+      expect(isStandingOrderPayer('Per Dauerauftrag')).toBe(true);
+      expect(isStandingOrderPayer('DAUERAUFTRAG ')).toBe(true);
+      expect(isStandingOrderPayer('Dauerauftragszahler')).toBe(true);
+      expect(isStandingOrderPayer('DE23100000001234567890')).toBe(false);
+      expect(isStandingOrderPayer('')).toBe(false);
+    });
+
+    it('isValidIBAN und maskIBAN behandeln DAUERAUFTRAG als valide und maskieren nicht', () => {
+      expect(isValidIBAN('DAUERAUFTRAG')).toBe(true);
+      expect(isValidIBAN('Dauerauftrag')).toBe(true);
+      expect(maskIBAN('DAUERAUFTRAG')).toBe('DAUERAUFTRAG');
+      expect(maskIBAN('Dauerauftrag')).toBe('Dauerauftrag');
+    });
+
+    it('erfasst Dauerauftragszahler als gültig, aber automatisch von SEPA-Export ausgenommen', () => {
+      const standingMember = createMember({
+        id: '3501',
+        firstName: 'Dauer',
+        lastName: 'Zahler',
+        fullName: 'Dauer Zahler',
+        accountHolder: 'Dauer Zahler',
+        iban: 'DAUERAUFTRAG',
+        bic: '',
+        sepaMandate: '',
+        status: 'active',
+      });
+
+      const result = processContributions([standingMember]);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.isStandingOrder).toBe(true);
+      expect(group.isValid).toBe(true);
+      expect(group.errors.length).toBe(0); // Kein IBAN- oder Mandatsfehler!
+      expect(group.selectedForExport).toBe(false); // Nicht für SEPA ausgewählt
+      expect(group.totalAmount).toBe(25.0); // Beitrag wird trotzdem berechnet
+      expect(group.warnings.some(w => w.includes('Zahlungsart: Dauerauftrag'))).toBe(true);
+
+      // In SEPA-CSV darf der Dauerauftragszahler NICHT exportiert werden
+      const sepaCsv = generateSepaCsv(result.payerGroups);
+      expect(sepaCsv).not.toContain('Dauer Zahler');
+
+      // Im Prüfbericht (Audit-CSV) muss er für den Bankkonto-Abgleich enthalten sein
+      const auditCsv = generateAuditCsv(result.payerGroups, []);
+      expect(auditCsv).toContain('Dauer Zahler');
+      expect(auditCsv).toContain('DAUERAUFTRAG');
+      expect(auditCsv).toContain('25,00');
+
+      // StatusFilter "standingOrder" findet die Gruppe
+      expect(matchesStatusFilter(group, 'standingOrder')).toBe(true);
+      expect(matchesStatusFilter(group, 'active')).toBe(true);
+      expect(matchesStatusFilter(group, 'invoice')).toBe(false);
+    });
+
+    it('Familie mit Dauerauftrag zahlt Verbundbeitrag und ist von SEPA ausgenommen', () => {
+      const father = createMember({
+        id: '3510',
+        firstName: 'Familien',
+        lastName: 'Vater',
+        fullName: 'Familien Vater',
+        accountHolder: 'Familien Vater',
+        iban: 'DAUERAUFTRAG',
+        bic: '',
+        sepaMandate: '',
+        status: 'active',
+        partner: '3511',
+      });
+
+      const mother = createMember({
+        id: '3511',
+        firstName: 'Familien',
+        lastName: 'Mutter',
+        fullName: 'Familien Mutter',
+        accountHolder: 'Familien Vater',
+        iban: '',
+        bic: '',
+        sepaMandate: '',
+        status: 'active',
+        partner: '3510',
+      });
+
+      const result = processContributions([father, mother]);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.isFamily).toBe(true);
+      expect(group.isStandingOrder).toBe(true);
+      expect(group.isValid).toBe(true);
+      expect(group.totalAmount).toBe(30.0); // 20 € Sockel + 10 € aktive Mutter
+      expect(group.selectedForExport).toBe(false);
+
+      const sepaCsv = generateSepaCsv(result.payerGroups);
+      expect(sepaCsv).not.toContain('Familien Vater');
+
+      const auditCsv = generateAuditCsv(result.payerGroups, []);
+      expect(auditCsv).toContain('Familien Vater');
+      expect(auditCsv).toContain('Familien Mutter');
+      expect(auditCsv).toContain('DAUERAUFTRAG');
+    });
+  });
+
   describe('Warnung bei Status "Kind" mit Alter >= 18 zum Stichtag', () => {
     it('erzeugt Warnung bei Mitglied mit Status "child" und Alter >= 18', () => {
       const grownChild = createMember({
@@ -2062,7 +2169,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
         fullName: 'Bettina Bidi',
         iban: '',
         status: 'active',
-        partner: '', // Beim Partner wurde das Feld in ClubDesk nicht gepflegt
+        partner: '', // Beim Partner wurde das Feld in zunft.app nicht gepflegt
         famMemberFlag: '0',
       });
 

@@ -11,6 +11,7 @@ import {
   FileText,
   Users,
   User,
+  Repeat,
 } from 'lucide-react';
 import { StatusFilterType, ValidityFilterType } from '../utils/sepaCalculator.ts';
 
@@ -23,6 +24,7 @@ export interface FilterCounts {
   single: number;
   free: number;
   invoice: number;
+  standingOrder: number;
   valid: number;
   issues: number;
 }
@@ -130,6 +132,14 @@ export function FilterBar({
       icon: FileText,
       iconColor: 'text-amber-600',
       activeStyle: 'bg-amber-600 text-white border-amber-600',
+    },
+    {
+      id: 'standingOrder',
+      label: 'Dauerauftrag',
+      count: filterCounts.standingOrder,
+      icon: Repeat,
+      iconColor: 'text-sky-600',
+      activeStyle: 'bg-sky-700 text-white border-sky-700',
     },
   ];
 
