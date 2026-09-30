@@ -648,9 +648,32 @@ export function processContributions(members: Member[]): ContributionResult {
     }
   });
 
+  // Ehrenmitglieder ohne eigene IBAN/Mandat sind nicht beitragspflichtig (0 €).
+  // Wenn sie keinem bestehenden Zahler als Partner oder Kind zugeordnet sind,
+  // bilden sie eine eigene beitragsfreie Zahlergruppe (ohne Fehler/Warnung).
+  const remainingNonPayers: Member[] = [];
   nonPayers.forEach(m => {
+    if (isHonoraryMember(m) && !isInactiveMember(m)) {
+      const isPartnerOfExistingPayer = Boolean(m.partner && m.partner !== '0' && payerGroups.has(m.partner));
+      const isChildOfExistingPayer = Boolean(
+        (m.parent1 && m.parent1 !== '0' && payerGroups.has(m.parent1)) ||
+        (m.parent2 && m.parent2 !== '0' && payerGroups.has(m.parent2))
+      );
+      if (!isPartnerOfExistingPayer && !isChildOfExistingPayer) {
+        payerGroups.set(m.id, {
+          payer: m,
+          members: [m],
+          assignedMemberIds: new Set([m.id]),
+        });
+        return;
+      }
+    }
+    remainingNonPayers.push(m);
+  });
+
+  remainingNonPayers.forEach(m => {
     let matchedPayerId: string | null = null;
-    const isOver25ActiveOrPassive = !isInactiveMember(m) && m.age !== null && m.age >= 25;
+    const isOver25ActiveOrPassive = !isInactiveMember(m) && !isHonoraryMember(m) && m.age !== null && m.age >= 25;
     const isPartnerMatch = Boolean(m.partner && m.partner !== '0' && payerGroups.has(m.partner));
 
     if (isOver25ActiveOrPassive) {
@@ -696,8 +719,9 @@ export function processContributions(members: Member[]): ContributionResult {
       group.members.push(m);
       group.assignedMemberIds.add(m.id);
     } else {
-      // Gekündigte/verstorbene Mitglieder ohne Zahler sind KEIN Fehler/Problem, sondern regulär inaktiv!
-      if (!isInactiveMember(m)) {
+      // Gekündigte/verstorbene Mitglieder sowie beitragsfreie Ehrenmitglieder ohne Zahler
+      // sind KEIN Fehler/Problem und erzeugen keine Warnung/Unassigned-Eintrag.
+      if (!isInactiveMember(m) && !isHonoraryMember(m)) {
         const isChildWithAge18 = isChildOrYouthStatus(m.status) && m.age !== null && m.age >= 18;
         let issue = isOver25ActiveOrPassive
           ? 'Mitglied ist ≥ 25 Jahre alt ohne eigene IBAN (neue Mitgliedschaft erforderlich gem. § 2 Beitragsordnung).'
@@ -747,74 +771,6 @@ export function processContributions(members: Member[]): ContributionResult {
 
     const warnings: string[] = [];
     const errors: string[] = [];
-
-    // IBAN- & Mandatsprüfungen
-    if (isInvoice) {
-      warnings.push('Zahlungsart: Per Rechnung (Selbstzahler, kein SEPA-Einzug).');
-    } else {
-      if (!payer.iban) {
-        errors.push('IBAN fehlt beim Zahler.');
-      } else if (!isValidIBAN(payer.iban)) {
-        errors.push('Ungültige IBAN (Prüfziffer stimmt nicht).');
-      } else if (!payer.iban.startsWith('DE')) {
-        warnings.push(`Ausländische IBAN (${payer.iban}) – bitte vor Einzug SEPA-Fähigkeit prüfen.`);
-      }
-
-      if (!payer.sepaMandate || payer.sepaMandate.toLowerCase() === 'n.a.') {
-        errors.push('Fehlendes SEPA-Mandat.');
-      }
-      if (!payer.signatureDate) {
-        warnings.push('Unterschriftsdatum des Mandats fehlt.');
-      }
-    }
-
-    // Ehrenmitglied als Familienzahler: Fällt aus Familienbeitrag heraus (0 €)
-    // Wenn weitere beitragspflichtige Angehörige vorhanden sind, Warnung erzeugen!
-    if (isPayerHonorary && nonHonoraryOtherLiving.length > 0) {
-      const liableOthers = nonHonoraryOtherLiving.filter(m => {
-        const isUnder18 = m.age !== null ? m.age < 18 : isChildOrYouthStatus(m.status);
-        return !isUnder18;
-      });
-      if (liableOthers.length > 0) {
-        warnings.push(
-          `Zahler ${payer.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus. Für die Familie liegt kein regulärer Familienbeitragszahler vor (Klärung erforderlich).`
-        );
-      }
-    }
-
-    // Angehörige, die Ehrenmitglieder sind, erzeugen Hinweis zur Herauslösung
-    const honoraryOthers = otherLivingMembers.filter(m => isHonoraryMember(m));
-    honoraryOthers.forEach(hm => {
-      warnings.push(
-        `Angehörige(r) ${hm.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus.`
-      );
-    });
-
-    // Prüfen auf Diskrepanz Status "Kind" aber Alter >= 18 zum Stichtag 15.04.
-    groupMembers.forEach(m => {
-      const isChildByStatus = isChildOrYouthStatus(m.status);
-      if (isChildByStatus && m.age !== null && m.age >= 18) {
-        warnings.push(
-          `Mitglied ${m.fullName} (${m.id}) hat Status „${getMemberStatusLabel(m.status)}“, ist aber zum Stichtag (15.04.) bereits ${m.age} Jahre alt (Stammdaten prüfen).`
-        );
-      }
-    });
-
-    // Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat
-    nonHonoraryOtherLiving.forEach(m => {
-      const isPartner = m.partner === payer.id || payer.partner === m.id;
-      if (isPartner) {
-        if (isInvoice) {
-          warnings.push(
-            `Lebenspartner ${m.fullName} wird über die Rechnung von ${payer.fullName} abgerechnet – Stammdaten/Verknüpfung prüfen.`
-          );
-        } else {
-          warnings.push(
-            `Lebenspartner ${m.fullName} wird über das Mandat von ${payer.fullName} eingezogen – Stammdaten/Verknüpfung prüfen.`
-          );
-        }
-      }
-    });
 
     let familyBaseAssigned = false;
 
@@ -904,6 +860,81 @@ export function processContributions(members: Member[]): ContributionResult {
         fee,
         reason,
       });
+    });
+
+    // IBAN- & Mandatsprüfungen:
+    // Werden NUR durchgeführt, wenn tatsächlich ein Betrag eingezogen werden soll (totalAmount > 0).
+    // Beitragsfreie Mitglieder (insbesondere Ehrenmitglieder mit 0,00 €) sind nicht beitragspflichtig
+    // und benötigen weder IBAN noch SEPA-Mandat. Fehlende IBANs sind hier kein Fehler/Warnung.
+    if (totalAmount > 0) {
+      if (isInvoice) {
+        warnings.push('Zahlungsart: Per Rechnung (Selbstzahler, kein SEPA-Einzug).');
+      } else {
+        if (!payer.iban) {
+          errors.push('IBAN fehlt beim Zahler.');
+        } else if (!isValidIBAN(payer.iban)) {
+          errors.push('Ungültige IBAN (Prüfziffer stimmt nicht).');
+        } else if (!payer.iban.startsWith('DE')) {
+          warnings.push(`Ausländische IBAN (${payer.iban}) – bitte vor Einzug SEPA-Fähigkeit prüfen.`);
+        }
+
+        if (!payer.sepaMandate || payer.sepaMandate.toLowerCase() === 'n.a.') {
+          errors.push('Fehlendes SEPA-Mandat.');
+        }
+        if (!payer.signatureDate) {
+          warnings.push('Unterschriftsdatum des Mandats fehlt.');
+        }
+      }
+    }
+
+    // Ehrenmitglied als Familienzahler: Fällt aus Familienbeitrag heraus (0 €)
+    // Wenn weitere beitragspflichtige Angehörige vorhanden sind, Warnung erzeugen!
+    if (isPayerHonorary && nonHonoraryOtherLiving.length > 0) {
+      const liableOthers = nonHonoraryOtherLiving.filter(m => {
+        const isUnder18 = m.age !== null ? m.age < 18 : isChildOrYouthStatus(m.status);
+        return !isUnder18;
+      });
+      if (liableOthers.length > 0) {
+        warnings.push(
+          `Zahler ${payer.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus. Für die Familie liegt kein regulärer Familienbeitragszahler vor (Klärung erforderlich).`
+        );
+      }
+    }
+
+    // Angehörige, die Ehrenmitglieder sind, erzeugen Hinweis zur Herauslösung
+    if (!isPayerHonorary) {
+      const honoraryOthers = otherLivingMembers.filter(m => isHonoraryMember(m));
+      honoraryOthers.forEach(hm => {
+        warnings.push(
+          `Angehörige(r) ${hm.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus.`
+        );
+      });
+    }
+
+    // Prüfen auf Diskrepanz Status "Kind" aber Alter >= 18 zum Stichtag 15.04.
+    groupMembers.forEach(m => {
+      const isChildByStatus = isChildOrYouthStatus(m.status);
+      if (isChildByStatus && m.age !== null && m.age >= 18) {
+        warnings.push(
+          `Mitglied ${m.fullName} (${m.id}) hat Status „${getMemberStatusLabel(m.status)}“, ist aber zum Stichtag (15.04.) bereits ${m.age} Jahre alt (Stammdaten prüfen).`
+        );
+      }
+    });
+
+    // Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat
+    nonHonoraryOtherLiving.forEach(m => {
+      const isPartner = m.partner === payer.id || payer.partner === m.id;
+      if (isPartner) {
+        if (isInvoice) {
+          warnings.push(
+            `Lebenspartner ${m.fullName} wird über die Rechnung von ${payer.fullName} abgerechnet – Stammdaten/Verknüpfung prüfen.`
+          );
+        } else {
+          warnings.push(
+            `Lebenspartner ${m.fullName} wird über das Mandat von ${payer.fullName} eingezogen – Stammdaten/Verknüpfung prüfen.`
+          );
+        }
+      }
     });
 
     results.push({

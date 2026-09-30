@@ -204,11 +204,17 @@ export function PayerTable({
                         <>
                           <span className="inline-flex items-center gap-1">
                             IBAN: <strong className="text-stone-700 font-mono">
-                              {privacyMode && !revealedIbans.has(group.payerId)
-                                ? maskIBAN(group.iban)
-                                : group.iban}
+                              {group.iban ? (
+                                privacyMode && !revealedIbans.has(group.payerId)
+                                  ? maskIBAN(group.iban)
+                                  : group.iban
+                              ) : (
+                                <span className="text-stone-400 font-sans italic font-normal">
+                                  {group.totalAmount === 0 ? 'Nicht erforderlich (Beitragsfrei)' : '—'}
+                                </span>
+                              )}
                             </strong>
-                            {privacyMode && (
+                            {group.iban && privacyMode && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -231,7 +237,7 @@ export function PayerTable({
                             )}
                           </span>
                           {group.bic && <span>BIC: {group.bic}</span>}
-                          <span>Mandat: <strong>{group.mandate}</strong></span>
+                          <span>Mandat: <strong>{group.mandate || (group.totalAmount === 0 ? '—' : '')}</strong></span>
                           {group.signatureDate && (
                             <span>Datum: {group.signatureDate}</span>
                           )}

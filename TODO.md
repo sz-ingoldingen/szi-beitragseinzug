@@ -25,6 +25,14 @@
   Ehrenmitglieder und Träger von Ehrenämtern (§ 1 Abs. 6) fallen **immer** aus dem Familienbeitrag heraus und sind stets mit **0,00 €** beitragsfrei.
   War ein Ehrenmitglied als Familienzahler eingetragen, darf es nicht den 20 € Sockelbeitrag zahlen. Für die verbleibenden Familienangehörigen wird ein Prüfhinweis erzeugt, falls ein neuer Kontoinhaber/Zahler bestimmt werden muss.
 
+### Ehrenmitglieder ohne IBAN (§ 1 Abs. 6)
+* **Entscheidung:**
+  Da Ehrenmitglieder und Träger von Ehrenämtern nicht beitragspflichtig sind (0,00 € Beitrag), ist die Angabe einer IBAN oder eines SEPA-Mandats **nicht erforderlich**.
+* **Auswirkung:**
+  * Ehrenmitglieder ohne IBAN/Mandat werden **nicht** als Fehler oder Warnung ausgegeben.
+  * Sie landen **nicht** in den „nicht zugeordneten Mitgliedern“ (UnassignedPanel).
+  * Sie bilden stattdessen reguläre, gültige beitragsfreie Gruppen (0,00 €), werden im Dashboard sauber unter „Ehrenmitglieder“ / „Beitragsfrei“ geführt und erscheinen im Audit-CSV mit 0,00 € und Notiz `Beitragsfrei gem. § 1 Abs. 6`.
+
 ### Fester Stichtag 15.04. für Altersberechnung & Einzugsdatum (G8)
 * **Entscheidung:**
   Stichtag für sämtliche Altersberechnungen (Kind < 18 Jahre, Familienkind < 25 Jahre) ist der **15.04. des laufenden Beitragsjahres** (analog zum offiziellen Anmeldeformular).
@@ -77,6 +85,7 @@
 - [x] **Stammdaten-Warnung Status Kind (L6):** Prüfhinweis bei Mitgliedern mit Status `child`, die zum Stichtag 15.04. bereits $\ge 18$ Jahre alt sind.
 - [x] **Internationale IBANs (F3):** Internationaler MOD 97-Check, Warnung statt Fehler bei Nicht-DE-IBANs.
 - [x] **Ehrenamtsbefreiung (§ 1 Abs. 6):** Nur echte Ehrenämter (`Ehrenvorstand`, `Ehrenmitglied`, `Ehrendirigent`, `Ehrenamtsinhaber`) sind beitragsfrei (0 €). Reguläre Vorstandsämter (`1./2. Vorstand`, `Schriftführerin`, `Kassier`, `Beisitzer` etc.) zahlen regulären Beitrag.
+- [x] **Ehrenmitglieder ohne IBAN (§ 1 Abs. 6):** Da Ehrenmitglieder nicht beitragspflichtig sind (0 €), ist keine IBAN/Mandat erforderlich. Fehlende IBANs erzeugen keine Warnung/Fehler und landen nicht in den nicht zugeordneten Mitgliedern.
 - [x] **Gekündigte & verstorbene Mitglieder:** Separate Info-Darstellung (ohne Warnung) und kein Beitragseinzug (0,00 €).
 - [x] **Datenschutz & Git-Historie:** Vollständige Bereinigung aller Echtdaten in den Beispieldatensätzen und Bereinigung der Git-Historie auf GitHub.
 - [x] **Hosting:** Automatisierter GitHub Actions Workflow für GitHub Pages eingerichtet.

@@ -1646,6 +1646,140 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
     });
   });
 
+  describe('Ehrenmitglieder ohne IBAN (§ 1 Abs. 6 - keine Warnung, kein Fehler)', () => {
+    it('Ehrenmitglied ohne IBAN/Mandat erzeugt keine Warnung, keinen Fehler und landet nicht in unassignedMembers', () => {
+      const honoraryNoIban: Member = {
+        rowIndex: 1,
+        id: '6001',
+        firstName: 'Josef',
+        lastName: 'Ehrenmann',
+        fullName: 'Josef Ehrenmann',
+        status: MemberStatus.SPONSOR, // 'sponsor'
+        birthDate: '01.01.1945',
+        age: 81,
+        accountHolder: '',
+        iban: '',
+        bic: '',
+        sepaMandate: '',
+        signatureDate: '',
+        parent1: '0',
+        parent2: '0',
+        partner: '0',
+        famPayerFlag: '0',
+        famMemberFlag: '0',
+        boardFunction: '',
+        clubFunction: 'Ehrenmitglied',
+        otherFunction: '',
+        maskGroup: '',
+        danceGroup: '',
+        comment: '',
+        raw: [],
+      };
+
+      const result = processContributions([honoraryNoIban]);
+
+      // 1. Landet NICHT in unassignedMembers (kein Fehler!)
+      expect(result.unassignedMembers.length).toBe(0);
+
+      // 2. Bildet eine eigene PayerGroup mit 0,00 €
+      expect(result.payerGroups.length).toBe(1);
+      const group = result.payerGroups[0];
+      expect(group.totalAmount).toBe(0.0);
+      expect(group.members[0].fee).toBe(0.0);
+      expect(group.members[0].reason).toContain('Beitragsfrei gem. § 1 Abs. 6');
+
+      // 3. Keine Fehler und keine Warnungen (z.B. keine IBAN-Warnung)
+      expect(group.errors.length).toBe(0);
+      expect(group.warnings.length).toBe(0);
+      expect(group.isValid).toBe(true);
+      expect(group.selectedForExport).toBe(false);
+
+      // 4. Audit-CSV enthält beitragsfreien Eintrag ohne FEHLER:
+      const auditCsv = generateAuditCsv(result.payerGroups, result.unassignedMembers, result.inactiveMembers);
+      expect(auditCsv).toContain('Beitragsfrei gem. § 1 Abs. 6');
+      expect(auditCsv).not.toContain('FEHLER:');
+    });
+
+    it('Ehrenmitglied ohne IBAN mit Kind (< 18 J.): Gesamtbetrag 0 € ohne Warnung/Fehler', () => {
+      const members: Member[] = [
+        createMember({
+          id: '6010',
+          firstName: 'Anton',
+          lastName: 'Ehrenvorstand',
+          fullName: 'Anton Ehrenvorstand',
+          accountHolder: '',
+          iban: '',
+          sepaMandate: '',
+          boardFunction: 'Ehrenvorstand',
+          status: 'active',
+          famPayerFlag: '1',
+        }),
+        createMember({
+          id: '6011',
+          firstName: 'Junior',
+          lastName: 'Ehrenvorstand',
+          fullName: 'Junior Ehrenvorstand',
+          accountHolder: '',
+          iban: '',
+          sepaMandate: '',
+          status: 'child',
+          birthDate: '01.01.2015',
+          age: 11,
+          parent1: '6010',
+        }),
+      ];
+
+      const result = processContributions(members);
+      expect(result.unassignedMembers.length).toBe(0);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.totalAmount).toBe(0.0);
+      expect(group.errors.length).toBe(0);
+      expect(group.warnings.length).toBe(0);
+      expect(group.isValid).toBe(true);
+    });
+
+    it('Zwei Ehrenmitglieder (Ehepaar, beide ohne IBAN): Gesamtbetrag 0 € ohne Warnung/Fehler', () => {
+      const members: Member[] = [
+        createMember({
+          id: '6020',
+          firstName: 'Hans',
+          lastName: 'Ehrenpaar',
+          fullName: 'Hans Ehrenpaar',
+          accountHolder: '',
+          iban: '',
+          sepaMandate: '',
+          status: 'sponsor',
+          clubFunction: 'Ehrenmitglied',
+          partner: '6021',
+        }),
+        createMember({
+          id: '6021',
+          firstName: 'Hanna',
+          lastName: 'Ehrenpaar',
+          fullName: 'Hanna Ehrenpaar',
+          accountHolder: '',
+          iban: '',
+          sepaMandate: '',
+          status: 'sponsor',
+          clubFunction: 'Ehrenmitglied',
+          partner: '6020',
+        }),
+      ];
+
+      const result = processContributions(members);
+      expect(result.unassignedMembers.length).toBe(0);
+      expect(result.payerGroups.length).toBe(1);
+
+      const group = result.payerGroups[0];
+      expect(group.totalAmount).toBe(0.0);
+      expect(group.errors.length).toBe(0);
+      expect(group.warnings.length).toBe(0);
+      expect(group.isValid).toBe(true);
+    });
+  });
+
   describe('Rechnungszahler (IBAN "Per Rechnung" & Ausschluss aus SEPA)', () => {
     it('isInvoicePayer erkennt verschiedene Schreibweisen von "Per Rechnung"', () => {
       expect(isInvoicePayer('Per Rechnung')).toBe(true);
