@@ -57,9 +57,9 @@ Der Code bildet die Beitragsordnung (05.04.2025) sowie alle Vorstandsvorgaben pr
 
 ---
 
-### G3: Lebenspartner ohne eigene IBAN (Historische Datenbasis)
+### G3: Lebenspartner ohne eigene IBAN (Geklärt / Entfernt)
 
-> **Hinweis:** Verknüpfungen stammen teils aus Altdaten-Imports und können ungenau sein. Ein Prüfhinweis bei mitabgebuchten Partnern ohne eigenes Mandat bleibt als Kontrollhilfe sinnvoll.
+> **Entscheidung:** Gemäß § 2 Beitragsordnung ist es der reguläre Standardfall, dass Familien und Lebenspartner über das Mandat eines gemeinsamen Zahlers abgerechnet werden. Künstliche Warnungen wurden entfernt, um das Dashboard auf echte Inkonsistenzen zu fokussieren.
 
 ---
 
@@ -91,16 +91,19 @@ BOM-Zeichen (`\uFEFF`) beim Import automatisch am Zeilenanfang strippen, falls C
 
 ### Abgeschlossen
 - [x] **Stichtagslogik 15.04. (G8):** Altersberechnung (Kind < 18, Kind < 25) und Einzugsdatum fest auf den 15.04. des Beitragsjahres gelegt.
+- [x] **Familienermittlung rein über Beziehung (§ 2):** Weder das Zahler-Flag noch das redundante Familienzugehörigkeitsflag werden herangezogen; Familienstatus wird ausschließlich über Beziehungen (Lebenspartner, Elternteil, Kontoinhaber) berechnet.
+- [x] **Bidirektionale Partnerverknüpfung:** Partner werden auch bei einseitiger Pflege im ClubDesk zuverlässig der Zahlgruppe zugeordnet.
+- [x] **Stammdaten-Prüfung bei fehlendem Partner:** Gezielte Warnung, wenn eine hinterlegte Partner-ID in der Mitgliederliste nicht existiert.
 - [x] **Ehrenmitglieder aus Familie herauslösen (G1 / G6):** Ehrenmitglied zahlt immer 0 €, Familie erhält Hinweis wenn Zahler Ehrenmitglied ist.
 - [x] **Rechnungszahler erkennen (L1):** IBAN *„Per Rechnung“* als Rechnungszahler geführt, kein Fehler, vom SEPA-Export ausgeschlossen und Filterbutton im Dashboard.
-- [x] **Lebenspartner-Prüfhinweis (G3 / TODO-1):** Gelber Prüfhinweis beim Zahler für mitabgebuchte Partner ohne eigenes Mandat.
+- [x] **Lebenspartner im Familienbeitrag (G3 / § 2):** Regulärer Einzug über das Mandat des gemeinsamen Familienzahlers ohne künstliche Warnung.
 - [x] **BOM-Zeichen & Encoding (G5 / TODO-2):** BOM-Stripping (`\uFEFF`) und ArrayBuffer-Kodierungserkennung (UTF-8 / ISO-8859-1).
 - [x] **Warnung Status `child` (L6):** Warnung erzeugen, wenn `status === 'child'` / `pkid`, aber Alter zum 15.04. bereits $\ge 18$ Jahre ist.
 - [x] **Nicht-deutsche IBANs (F3):** Internationaler MOD 97-Check, Warnung statt Fehler bei Nicht-DE-IBANs.
 - [x] **SEPA-Exportformat (G7 / TODO-3):** 7-spaltige SEPA-CSV als Standard festgelegt; kein SEPA-XML pain.008 notwendig.
 
 ### Offene Punkte
-*Alle fachlichen TODOs aus dem Beitragsordnungs-Review sind erfolgreich abgeschlossen.*
+*Alle fachlichen Vorgaben und Verfeinerungen sind vollständig umgesetzt.*
 
 ---
 

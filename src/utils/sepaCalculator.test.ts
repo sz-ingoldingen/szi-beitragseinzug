@@ -1252,7 +1252,7 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(valid.length).toBe(7); // Alle im Sample sind valid (keine IBAN-/Mandatsfehler)
 
       const issues = payerGroups.filter(g => matchesValidityFilter(g, 'issues'));
-      expect(issues.length).toBe(2); // Gruppen mit Lebenspartnern (10401, 10195) haben Prüfhinweis
+      expect(issues.length).toBe(0); // Keine künstlichen Partner-Warnungen mehr; reguläre Familien sind fehlerfrei
     });
 
     it('matchesSearchQuery: findet Zahler nach Name, IBAN und Gruppenmitgliedern', () => {
@@ -1902,8 +1902,8 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
     });
   });
 
-  describe('Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat', () => {
-    it('erzeugt Warnung bei Lastschrifteinzug über das Mandat des Partners', () => {
+  describe('Lebenspartner ohne eigene IBAN/Mandat (§ 2 Beitragsordnung)', () => {
+    it('erzeugt keine Warnung bei Lastschrifteinzug über das Mandat des Partners (regulärer Familienbeitrag)', () => {
       const payer = createMember({
         id: '6001',
         firstName: 'Paul',
@@ -1934,12 +1934,14 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       const result = processContributions([payer, partner]);
       const group = result.payerGroups[0];
 
-      expect(group.warnings.some(w =>
-        w.includes('Lebenspartner Paula Partner wird über das Mandat von Paul Payer eingezogen – Stammdaten/Verknüpfung prüfen.')
-      )).toBe(true);
+      // Regulärer Familienbeitrag über den gemeinsamen Zahler: Gültig ohne Warnung
+      expect(group.isValid).toBe(true);
+      expect(group.warnings.length).toBe(0);
+      expect(group.errors.length).toBe(0);
+      expect(group.totalAmount).toBe(30.0); // 20 € Sockel + 10 € aktiver Partner
     });
 
-    it('erzeugt passenden Hinweis bei Rechnungszahlern mit Lebenspartner', () => {
+    it('erzeugt keine Partner-Warnung bei Rechnungszahlern mit Lebenspartner', () => {
       const invoicePayer = createMember({
         id: '6003',
         firstName: 'Ralf',
@@ -1964,9 +1966,9 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       const result = processContributions([invoicePayer, invoicePartner]);
       const group = result.payerGroups[0];
 
-      expect(group.warnings.some(w =>
-        w.includes('Lebenspartner Rita Rechnung wird über die Rechnung von Ralf Rechnung abgerechnet – Stammdaten/Verknüpfung prüfen.')
-      )).toBe(true);
+      // Rechnungszahler-Hinweis ist vorhanden, aber KEINE Warnung wegen Lebenspartner
+      expect(group.warnings).toContain('Zahlungsart: Per Rechnung (Selbstzahler, kein SEPA-Einzug).');
+      expect(group.warnings.some(w => w.includes('Lebenspartner'))).toBe(false);
     });
   });
 
@@ -1984,6 +1986,251 @@ describe('Ehrenamt & Ehrenmitglied vs. regulärer Vorstand (§ 1 Abs. 6)', () =>
       expect(maskIBAN('Per Rechnung')).toBe('Per Rechnung');
       expect(maskIBAN('')).toBe('');
       expect(maskIBAN('DE12')).toBe('DE12');
+    });
+  });
+
+  describe('Familienermittlung rein über Zuordnung (kein Familienzahlerflag) & Partner-Prüfung', () => {
+    it('erkennt Familie rein über Zuordnung, selbst wenn famPayerFlag und famMemberFlag 0 sind', () => {
+      const payer = createMember({
+        id: '7001',
+        firstName: 'Felix',
+        lastName: 'Familie',
+        fullName: 'Felix Familie',
+        iban: 'DE12345678901234567890',
+        sepaMandate: 'MANDAT-7001',
+        status: 'active',
+        partner: '7002',
+        famPayerFlag: '0',
+      });
+      const partner = createMember({
+        id: '7002',
+        firstName: 'Frida',
+        lastName: 'Familie',
+        fullName: 'Frida Familie',
+        iban: '',
+        status: 'active',
+        partner: '7001',
+        famMemberFlag: '0',
+      });
+
+      const result = processContributions([payer, partner]);
+      const group = result.payerGroups[0];
+
+      expect(group.isFamily).toBe(true);
+      expect(group.totalAmount).toBe(30.0); // 20 € Sockel + 10 € aktiver Partner
+      expect(group.members.length).toBe(2);
+      expect(group.warnings.length).toBe(0);
+    });
+
+    it('erkennt Alleinstehende nicht als Familie, selbst wenn famPayerFlag 1 ist', () => {
+      const single = createMember({
+        id: '7003',
+        firstName: 'Simon',
+        lastName: 'Single',
+        fullName: 'Simon Single',
+        iban: 'DE12345678901234567890',
+        sepaMandate: 'MANDAT-7003',
+        status: 'active',
+        partner: '',
+        famPayerFlag: '1', // Altes/falsches Flag im Altdatenbestand
+      });
+
+      const result = processContributions([single]);
+      const group = result.payerGroups[0];
+
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(25.0);
+      expect(group.warnings.length).toBe(0);
+    });
+
+    it('unterstützt bidirektionale Partnerverknüpfung (Zahler verweist auf Partner, Partnerfeld beim Partner ist leer)', () => {
+      const payer = createMember({
+        id: '7004',
+        firstName: 'Bernd',
+        lastName: 'Bidi',
+        fullName: 'Bernd Bidi',
+        iban: 'DE12345678901234567890',
+        sepaMandate: 'MANDAT-7004',
+        status: 'active',
+        partner: '7005', // Zahler hat Partner eingetragen
+        famPayerFlag: '0',
+      });
+      const partner = createMember({
+        id: '7005',
+        firstName: 'Bettina',
+        lastName: 'Bidi',
+        fullName: 'Bettina Bidi',
+        iban: '',
+        status: 'active',
+        partner: '', // Beim Partner wurde das Feld in ClubDesk nicht gepflegt
+        famMemberFlag: '0',
+      });
+
+      const result = processContributions([payer, partner]);
+      const group = result.payerGroups[0];
+
+      expect(group.members.length).toBe(2);
+      expect(group.isFamily).toBe(true);
+      expect(group.totalAmount).toBe(30.0);
+    });
+
+    it('erzeugt Warnung (Stammdaten prüfen) wenn Zahler einen Lebenspartner hinterlegt hat, der nicht in der Liste existiert', () => {
+      const payer = createMember({
+        id: '8001',
+        firstName: 'Peter',
+        lastName: 'Partnerlos',
+        fullName: 'Peter Partnerlos',
+        iban: 'DE12345678901234567890',
+        sepaMandate: 'MANDAT-8001',
+        status: 'active',
+        partner: '99999', // Partner-ID existiert nicht im Verein
+        famPayerFlag: '0',
+      });
+
+      const result = processContributions([payer]);
+      const group = result.payerGroups[0];
+
+      expect(group.warnings.some(w =>
+        w.includes('Hinterlegte(r) Lebenspartner(in) (Nr. 99999) von Peter Partnerlos existiert nicht in der Mitgliederliste (Stammdaten prüfen).')
+      )).toBe(true);
+      // Zahler zahlt als Einzelperson (25 €)
+      expect(group.isFamily).toBe(false);
+      expect(group.totalAmount).toBe(25.0);
+    });
+
+    it('erzeugt Hinweis in unassignedMembers wenn unzugeordnetes Mitglied einen Partner hat, der nicht existiert', () => {
+      const orphan = createMember({
+        id: '8002',
+        firstName: 'Olga',
+        lastName: 'OhneZahler',
+        fullName: 'Olga OhneZahler',
+        iban: '',
+        status: 'active',
+        partner: '99999', // Partner existiert nicht
+      });
+
+      const result = processContributions([orphan]);
+      expect(result.unassignedMembers.length).toBe(1);
+      const unassigned = result.unassignedMembers[0];
+      expect(unassigned.issue).toContain('Hinterlegte(r) Lebenspartner(in) Nr. 99999 existiert nicht in der Mitgliederliste – Stammdaten prüfen');
+    });
+
+    it('erzeugt keine Warnung wenn Lebenspartner regulär in der Mitgliederliste vorhanden ist', () => {
+      const payer = createMember({
+        id: '8003',
+        firstName: 'Klaus',
+        lastName: 'Klar',
+        fullName: 'Klaus Klar',
+        status: 'active',
+        partner: '8004',
+      });
+      const partner = createMember({
+        id: '8004',
+        firstName: 'Klara',
+        lastName: 'Klar',
+        fullName: 'Klara Klar',
+        iban: '',
+        sepaMandate: '',
+        status: 'active',
+        partner: '8003',
+      });
+
+      const result = processContributions([payer, partner]);
+      const group = result.payerGroups[0];
+
+      expect(group.warnings.length).toBe(0);
+      expect(group.errors.length).toBe(0);
+      expect(group.isValid).toBe(true);
+    });
+
+    it('erkennt Familie rein über Eltern-Kind-Beziehung völlig ohne Zugehörigkeitsflag', () => {
+      const parent = createMember({
+        id: '9001',
+        firstName: 'Markus',
+        lastName: 'Mama',
+        fullName: 'Markus Mama',
+        status: 'active',
+        partner: '0',
+      });
+      const child = createMember({
+        id: '9002',
+        firstName: 'Charly',
+        lastName: 'Kind',
+        fullName: 'Charly Kind',
+        iban: '',
+        sepaMandate: '',
+        status: 'active',
+        age: 19,
+        parent1: '9001',
+      });
+
+      const result = processContributions([parent, child]);
+      const group = result.payerGroups[0];
+
+      expect(group.isFamily).toBe(true);
+      expect(group.members.length).toBe(2);
+      expect(group.totalAmount).toBe(30.0); // 20 € Sockel + 10 € 1. aktives Kind
+    });
+
+    it('unterstützt indirekte Eltern-Zuordnung (Kind verweist auf Mutter ohne IBAN, Mutter ist Zahler-Vater zugeordnet)', () => {
+      const father = createMember({
+        id: '9003',
+        firstName: 'Frank',
+        lastName: 'Familie',
+        fullName: 'Frank Familie',
+        status: 'active',
+        partner: '9004',
+      });
+      const mother = createMember({
+        id: '9004',
+        firstName: 'Monika',
+        lastName: 'Familie',
+        fullName: 'Monika Familie',
+        iban: '',
+        sepaMandate: '',
+        status: 'passive',
+        partner: '', // Einseitig beim Vater hinterlegt
+      });
+      const child = createMember({
+        id: '9005',
+        firstName: 'Clara',
+        lastName: 'Familie',
+        fullName: 'Clara Familie',
+        iban: '',
+        sepaMandate: '',
+        status: 'active',
+        age: 16,
+        parent1: '9004', // Kind verweist auf Mutter (die selbst keine IBAN hat)
+        parent2: '0',
+      });
+
+      const result = processContributions([father, mother, child]);
+      expect(result.payerGroups.length).toBe(1);
+      const group = result.payerGroups[0];
+
+      expect(group.members.length).toBe(3);
+      expect(group.isFamily).toBe(true);
+      expect(group.totalAmount).toBe(20.0); // 20 € Sockel (Mutter passiv 0 €, Kind U18 0 €)
+    });
+
+    it('erzeugt Hinweis in unassignedMembers wenn Elternteil in Mitgliederliste fehlt', () => {
+      const orphanChild = createMember({
+        id: '9006',
+        firstName: 'Oskar',
+        lastName: 'OhneEltern',
+        fullName: 'Oskar OhneEltern',
+        iban: '',
+        sepaMandate: '',
+        status: 'active',
+        age: 12,
+        parent1: '99998', // Unbekanntes Elternteil
+      });
+
+      const result = processContributions([orphanChild]);
+      expect(result.unassignedMembers.length).toBe(1);
+      expect(result.unassignedMembers[0].issue).toContain(
+        'Hinterlegtes Elternteil Nr. 99998 existiert nicht in der Mitgliederliste – Stammdaten prüfen'
+      );
     });
   });
 });

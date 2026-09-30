@@ -42,12 +42,31 @@
 * **Entscheidung:**
   Enthält das IBAN-Feld den Vermerk *„Per Rechnung“*, wird dies nicht als fehlerhafte IBAN gewertet, sondern das Mitglied wird als Rechnungszahler (Selbstzahler außerhalb SEPA) deklariert und aus dem SEPA-Lastschriftexport ausgeschlossen.
 
-### Lebenspartner ohne eigene IBAN/Mandat (G3)
+### Lebenspartner im Familienverbund (§ 2 Beitragsordnung)
 * **Entscheidung:**
-  Für mitabgebuchte Lebenspartner ohne eigenes SEPA-Mandat bzw. eigene IBAN wird beim Zahler ein gelber Prüfhinweis (Warnung) erzeugt:
-  > ⚠️ *„Lebenspartner [Name] wird über das Mandat von [Zahler] eingezogen – Stammdaten/Verknüpfung prüfen.“*
+  Gemäß § 2 Beitragsordnung ist es der reguläre Standardfall, dass Familien und Lebenspartner über das SEPA-Mandat bzw. die Rechnung eines gemeinsamen Familienzahlers abgerechnet werden.
 * **Auswirkung:**
-  Der Kassierer behält bei Altdaten oder veränderten Lebensverhältnissen die volle Kontrolle und kann zweifelhafte Verknüpfungen gezielt verifizieren.
+  * Es wird **keine künstliche Warnung** mehr erzeugt, wenn ein Lebenspartner über das Mandat des Zahlers eingezogen wird.
+  * Reguläre Familienzahler bleiben sauber als `Gültig` eingestuft.
+
+### Familienermittlung rein über Beziehung (Keine ClubDesk-Familienflags)
+* **Entscheidung:**
+  Sowohl das *„Familienbeitrag (Zahler)“*-Flag (Spalte 35) als auch das redundante *„Familienbeitrag“*-Zugehörigkeitsflag (Spalte 36) wurden **vollständig ausgebaut und werden ignoriert**.
+  Die Familienbildung und Beitragsermittlung erfolgt **ausschließlich über die tatsächlichen Beziehungen**:
+  * **Lebenspartner:** Bidirektionale Verknüpfung über das Feld `Lebenspartner` (Spalte 28).
+  * **Eltern-Kind:** Zuordnung über `Elternteil 1` & `Elternteil 2` (Spalten 26 & 27), inklusive indirekter Zuordnung (Kind $\rightarrow$ Partner des Zahlers $\rightarrow$ Familienzahler).
+  * **Kontoinhaber:** Namensabgleich bei Mitgliedern ohne eigene IBAN.
+* **Auswirkung:**
+  * Vollkommen unabhängig davon, ob oder wie die alten Flags in ClubDesk gesetzt sind.
+  * Keine Fehlberechnungen durch verwaiste Altdaten-Flags.
+  * Zuverlässige Erkennung von Familienverbünden auch bei einseitiger Pflege der Partner- oder Elternfelder.
+
+### Stammdatenprüfung bei echten Inkonsistenzen (z. B. fehlender Partner)
+* **Entscheidung:**
+  Prüfhinweise *(„Stammdaten prüfen“)* erscheinen gezielt nur noch bei **echten Inkonsistenzen** im Datenbestand:
+  * **Fehlender Lebenspartner:** Ist bei einem Mitglied eine Partner-ID hinterlegt, die in der Mitgliederliste gar nicht (mehr) existiert, warnt das System:
+    > ⚠️ *„Hinterlegte(r) Lebenspartner(in) (Nr. ...) von ... existiert nicht in der Mitgliederliste (Stammdaten prüfen).“*
+  * **Altersgrenze Status Kind:** Mitglieder mit Status `child`, die am Stichtag 15.04. bereits $\ge 18$ Jahre alt sind.
 
 ### Datenschutz & IBAN-Maskierung im UI (Schritt 4)
 * **Entscheidung:**
@@ -72,11 +91,14 @@
 
 ## 2. Abgeschlossene Punkte
 - [x] **Alleinstehende Familienzahler:** Automatische Umstellung auf regulären Einzelbeitrag (ohne Warnung).
+- [x] **Familienermittlung rein über Beziehung:** Sowohl das Zahler-Flag als auch das redundante Familienzugehörigkeitsflag wurden vollständig ausgebaut; Familien werden ausschließlich über die Beziehungsfelder (Lebenspartner, Elternteil, Kontoinhaber) ermittelt.
+- [x] **Bidirektionale Partnerverknüpfung:** Partner werden auch dann zuverlässig zugeordnet, wenn die Verknüpfung nur einseitig in ClubDesk hinterlegt wurde.
+- [x] **Stammdaten-Prüfung bei fehlendem Partner:** Gezielte Warnung, wenn eine hinterlegte Partner-ID in der Mitgliederliste nicht existiert.
 - [x] **Altersgrenze 25 Jahre (§ 2 Beitragsordnung):** Kinder ab 25 Jahren ohne eigene IBAN werden als Klärungsfall (Fehler) ausgewiesen – keine Abbuchung über Eltern.
 - [x] **Fester Stichtag 15.04. (G8):** Feste Stichtagslogik für Altersgrenzen (Kind < 18, Familie < 25) und Standard-Einzugsdatum implementiert.
 - [x] **Ehrenmitglieder im Familienverbund (G1 / G6):** Ehrenmitglieder sind stets 0 € beitragsfrei und fallen aus dem Familienverbund heraus; Hinweis für verbleibende Familie erzeugt.
 - [x] **Rechnungszahler (L1):** IBAN *„Per Rechnung“* als Selbstzahler erkannt, kein IBAN-Fehler, automatischer Ausschluss aus SEPA-Export & Filteroption im Dashboard.
-- [x] **Lebenspartner-Prüfhinweis (G3):** Gelber Hinweis beim Zahler zur Verifikation von mitabgebuchten Partnern ohne eigenes Mandat.
+- [x] **Lebenspartner im Familienbeitrag (§ 2):** Regulärer Einzug über das Mandat des gemeinsamen Familienzahlers ohne künstliche Warnung.
 - [x] **SEPA-Exportformat (G7):** 7-spaltige SEPA-CSV bestätigt; kein gesondertes SEPA-XML erforderlich.
 - [x] **Datenschutz & IBAN-Maskierung:** Umschaltbarer Datenschutzmodus mit `maskIBAN()` und Einzelaufdeckung im UI.
 - [x] **Keine Browser-Persistenz (DSGVO):** Bewusst rein flüchtige Verarbeitung im Arbeitsspeicher (kein LocalStorage).

@@ -17,8 +17,10 @@ export interface Member {
   parent1: string;
   parent2: string;
   partner: string;
-  famPayerFlag: string;
-  famMemberFlag: string;
+  /** @deprecated Nicht mehr genutzt; Ermittlung erfolgt rein über Beziehungen (Lebenspartner, Elternteil, Kontoinhaber) */
+  famPayerFlag?: string;
+  /** @deprecated Nicht mehr genutzt; Ermittlung erfolgt rein über Beziehungen (Lebenspartner, Elternteil, Kontoinhaber) */
+  famMemberFlag?: string;
   boardFunction: string;
   clubFunction: string;
   otherFunction: string;
@@ -654,7 +656,10 @@ export function processContributions(members: Member[]): ContributionResult {
   const remainingNonPayers: Member[] = [];
   nonPayers.forEach(m => {
     if (isHonoraryMember(m) && !isInactiveMember(m)) {
-      const isPartnerOfExistingPayer = Boolean(m.partner && m.partner !== '0' && payerGroups.has(m.partner));
+      const isPartnerOfExistingPayer = Boolean(
+        (m.partner && m.partner !== '0' && payerGroups.has(m.partner)) ||
+        Array.from(payerGroups.values()).some(g => g.payer.partner === m.id)
+      );
       const isChildOfExistingPayer = Boolean(
         (m.parent1 && m.parent1 !== '0' && payerGroups.has(m.parent1)) ||
         (m.parent2 && m.parent2 !== '0' && payerGroups.has(m.parent2))
@@ -674,20 +679,45 @@ export function processContributions(members: Member[]): ContributionResult {
   remainingNonPayers.forEach(m => {
     let matchedPayerId: string | null = null;
     const isOver25ActiveOrPassive = !isInactiveMember(m) && !isHonoraryMember(m) && m.age !== null && m.age >= 25;
-    const isPartnerMatch = Boolean(m.partner && m.partner !== '0' && payerGroups.has(m.partner));
+
+    // Partner-Zuordnung (bidirektional):
+    let partnerPayerId: string | null = null;
+    if (m.partner && m.partner !== '0' && payerGroups.has(m.partner)) {
+      partnerPayerId = m.partner;
+    } else {
+      for (const [payerId, group] of payerGroups.entries()) {
+        if (group.payer.partner === m.id) {
+          partnerPayerId = payerId;
+          break;
+        }
+      }
+    }
+    const isPartnerMatch = partnerPayerId !== null;
 
     if (isOver25ActiveOrPassive) {
       if (isPartnerMatch) {
-        matchedPayerId = m.partner;
+        matchedPayerId = partnerPayerId;
       }
       // Wenn aktiv/passiv, >= 25 und kein Lebenspartner: Herauslösung aus dem Familienbeitrag (§ 2 Beitragsordnung)
     } else {
       if (isPartnerMatch) {
-        matchedPayerId = m.partner;
+        matchedPayerId = partnerPayerId;
       } else if (m.parent1 && m.parent1 !== '0' && payerGroups.has(m.parent1)) {
         matchedPayerId = m.parent1;
       } else if (m.parent2 && m.parent2 !== '0' && payerGroups.has(m.parent2)) {
         matchedPayerId = m.parent2;
+      }
+
+      // Falls Elternteil nicht selbst Zahler ist, aber bereits einer Zahlgruppe angehört
+      if (!matchedPayerId) {
+        for (const [payerId, group] of payerGroups.entries()) {
+          const parent1InGroup = Boolean(m.parent1 && m.parent1 !== '0' && group.assignedMemberIds.has(m.parent1));
+          const parent2InGroup = Boolean(m.parent2 && m.parent2 !== '0' && group.assignedMemberIds.has(m.parent2));
+          if (parent1InGroup || parent2InGroup) {
+            matchedPayerId = payerId;
+            break;
+          }
+        }
       }
 
       if (!matchedPayerId) {
@@ -729,6 +759,18 @@ export function processContributions(members: Member[]): ContributionResult {
         if (isChildWithAge18) {
           issue += ` (Hinweis: Status „${getMemberStatusLabel(m.status)}“, aber bereits ${m.age} Jahre alt zum Stichtag 15.04.)`;
         }
+        if (m.partner && m.partner !== '0') {
+          const partner = memberMap.get(m.partner);
+          if (!partner) {
+            issue += ` (Hinterlegte(r) Lebenspartner(in) Nr. ${m.partner} existiert nicht in der Mitgliederliste – Stammdaten prüfen).`;
+          }
+        }
+        if (m.parent1 && m.parent1 !== '0' && !memberMap.has(m.parent1)) {
+          issue += ` (Hinterlegtes Elternteil Nr. ${m.parent1} existiert nicht in der Mitgliederliste – Stammdaten prüfen).`;
+        }
+        if (m.parent2 && m.parent2 !== '0' && !memberMap.has(m.parent2)) {
+          issue += ` (Hinterlegtes Elternteil Nr. ${m.parent2} existiert nicht in der Mitgliederliste – Stammdaten prüfen).`;
+        }
         unassignedMembers.push({
           ...m,
           issue,
@@ -750,13 +792,12 @@ export function processContributions(members: Member[]): ContributionResult {
     // Lebende Angehörige, die KEINE Ehrenmitglieder sind
     const nonHonoraryOtherLiving = otherLivingMembers.filter(m => !isHonoraryMember(m));
 
-    // Alleinstehende Familienzahler:
-    // Ein Ehrenmitglied zahlt nie den Familienbeitrag (fällt immer aus der Familie heraus).
-    // Wenn neben dem Zahler keine weiteren beitragspflichtigen Angehörigen vorhanden sind,
-    // wird automatisch auf Einzelzahler umgestellt.
-    const isMultiMember = groupMembers.length > 1;
-    const hasFamilyFlag = groupMembers.some(m => m.famPayerFlag === '1' || m.famMemberFlag === '1');
-    const isFamily = !isPayerHonorary && (isMultiMember || hasFamilyFlag) && nonHonoraryOtherLiving.length > 0;
+    // Familienbeitrag (§ 2 Beitragsordnung):
+    // Wird ausschließlich über die tatsächliche Zuordnung von Angehörigen bestimmt (Lebenspartner, Kinder unter 25).
+    // Das ClubDesk-Flag "Familienbeitrag (Zahler)" wird nicht mehr herangezogen.
+    // Ein Verbund ist eine Familie, wenn neben dem Zahler mindestens ein weiteres lebendes,
+    // nicht-ehrenamtliches Angehörigenmitglied zugeordnet ist.
+    const isFamily = !isPayerHonorary && nonHonoraryOtherLiving.length > 0;
 
     // Wenn alle Mitglieder in der Gruppe gekündigt/verstorben sind, ist kein Einzug nötig:
     // Sie werden nicht in die aktiven Lastschriften aufgenommen
@@ -921,17 +962,14 @@ export function processContributions(members: Member[]): ContributionResult {
       }
     });
 
-    // Prüfhinweis für Lebenspartner ohne eigene IBAN/Mandat
-    nonHonoraryOtherLiving.forEach(m => {
-      const isPartner = m.partner === payer.id || payer.partner === m.id;
-      if (isPartner) {
-        if (isInvoice) {
+    // Prüfen auf Dateninkonsistenzen bei Lebenspartnern:
+    // "Stammdaten prüfen" soll warnen, wenn z. B. der hinterlegte Partner fehlt
+    groupMembers.forEach(m => {
+      if (!isInactiveMember(m) && m.partner && m.partner !== '0') {
+        const partner = memberMap.get(m.partner);
+        if (!partner) {
           warnings.push(
-            `Lebenspartner ${m.fullName} wird über die Rechnung von ${payer.fullName} abgerechnet – Stammdaten/Verknüpfung prüfen.`
-          );
-        } else {
-          warnings.push(
-            `Lebenspartner ${m.fullName} wird über das Mandat von ${payer.fullName} eingezogen – Stammdaten/Verknüpfung prüfen.`
+            `Hinterlegte(r) Lebenspartner(in) (Nr. ${m.partner}) von ${m.fullName} existiert nicht in der Mitgliederliste (Stammdaten prüfen).`
           );
         }
       }
