@@ -1,0 +1,91 @@
+{
+  "$schema": "https://szi-ingoldingen.de/schemas/fee-rules-v1.json",
+  "id": "szi-standard-2025",
+  "name": "SZI Beitragsordnung (Stand 05.04.2025)",
+  "version": "1.0.0",
+  "effectiveFrom": "2025-04-05",
+  "currency": "EUR",
+  "description": "Offizielle Beitragsordnung des Schalmeienzug Ingoldingen e.V. gem. Beschluss der Generalversammlung vom 05.04.2025",
+
+  "timing": {
+    "cutoffDay": 15,
+    "cutoffMonth": 4,
+    "comment": "Stichtag für Altersberechnungen ist der 15. April des laufenden Beitragsjahres"
+  },
+
+  "ageThresholds": {
+    "youthExemptMaxAge": 18,
+    "familyChildMaxAge": 25
+  },
+
+  "rates": {
+    "single": {
+      "adultActive": 25.0,
+      "adultPassive": 12.0,
+      "youthUnder18": 0.0,
+      "defaultFallback": 12.0
+    },
+    "family": {
+      "basePayer": 20.0,
+      "activePartner": 10.0,
+      "passivePartner": 0.0,
+      "firstActiveChild": 10.0,
+      "subsequentActiveChild": 0.0,
+      "passiveChild": 0.0,
+      "youthUnder18": 0.0
+    },
+    "specialFees": {
+      "invoiceExtraCharge": 5.0,
+      "instrumentDeposit": 100.0
+    }
+  },
+
+  "statusClassifications": {
+    "activeCodes": [
+      "active",
+      "premium",
+      "limited",
+      "twen",
+      "teen",
+      "child",
+      "infant"
+    ],
+    "passiveCodes": [
+      "passive",
+      "pprem",
+      "plimit",
+      "pinfant",
+      "pkid",
+      "pteen",
+      "ptwen",
+      "senior"
+    ],
+    "guestCodes": [
+      "guest",
+      "gprem",
+      "glimit",
+      "ginfant",
+      "gkid",
+      "gteen",
+      "gtwen"
+    ],
+    "honoraryCodes": [
+      "sponsor",
+      "ehrenmitglied",
+      "honorary"
+    ]
+  },
+
+  "exemptions": {
+    "honoraryKeywords": [
+      "ehren",
+      "honorary",
+      "ehrenvorstand",
+      "ehrendirigent",
+      "ehrenmitglied",
+      "ehrenamtsinhaber",
+      "ehrenvorsitz"
+    ],
+    "regularBoardIsPayable": true
+  }
+}

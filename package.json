@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build:catalog": "node scripts/buildCatalog.js",
+    "build": "node scripts/buildCatalog.js && tsc && vite build",
     "preview": "vite preview",
+    "pretest": "node scripts/buildCatalog.js",
     "test": "vitest run"
   },
   "keywords": [],
@@ -15,7 +17,8 @@
     "lucide-react": "^1.48.0",
     "papaparse": "^5.7.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

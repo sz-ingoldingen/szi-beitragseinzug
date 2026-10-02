@@ -1,11 +1,13 @@
 import React from 'react';
-import { FileSpreadsheet, Download } from 'lucide-react';
+import { FileSpreadsheet, Download, GitCompare } from 'lucide-react';
 
 interface ExportBarProps {
   selectedDebitsCount: number;
   totalEuro: number;
   onDownloadAudit: () => void;
   onDownloadSepa: () => void;
+  onDownloadComparisonAudit?: () => void;
+  hasComparison?: boolean;
 }
 
 export function ExportBar({
@@ -13,6 +15,8 @@ export function ExportBar({
   totalEuro,
   onDownloadAudit,
   onDownloadSepa,
+  onDownloadComparisonAudit,
+  hasComparison,
 }: ExportBarProps): React.JSX.Element {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-[#261420]/95 backdrop-blur-md text-white border-t-2 border-[#AC8AD7] shadow-2xl p-4 z-40">
@@ -30,6 +34,18 @@ export function ExportBar({
         </div>
 
         <div className="flex items-center gap-3">
+          {hasComparison && onDownloadComparisonAudit && (
+            <button
+              type="button"
+              onClick={onDownloadComparisonAudit}
+              className="border border-[#EFC415]/60 hover:bg-[#361B2E] text-[#FEFCE8] font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition flex items-center gap-2 shadow-sm cursor-pointer"
+              title="Detaillierte CSV mit Vorher-Nachher-Vergleich pro Mitglied herunterladen"
+            >
+              <GitCompare className="w-4 h-4 text-[#EFC415]" />
+              <span>Vergleichsbericht (CSV)</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onDownloadAudit}

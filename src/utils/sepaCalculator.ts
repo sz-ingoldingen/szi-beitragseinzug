@@ -1,4 +1,8 @@
 import Papa from 'papaparse';
+import { FeeRuleSet, DEFAULT_SZI_RULES } from '../types/rules';
+
+export type { FeeRuleSet } from '../types/rules';
+export { DEFAULT_SZI_RULES } from '../types/rules';
 
 export interface Member {
   rowIndex: number;
@@ -256,16 +260,24 @@ export function getMemberStatusLabel(status: string): string {
 /**
  * Prüft, ob ein Status als aktiv gilt.
  */
-export function isActiveStatus(status: string): boolean {
+export function isActiveStatus(status: string, rules?: FeeRuleSet): boolean {
   const clean = (status || '').toLowerCase().trim();
+  if (rules?.statusClassifications?.activeCodes) {
+    const list = rules.statusClassifications.activeCodes.map(c => c.toLowerCase().trim());
+    return list.includes(clean) || (clean === 'aktiv' && list.includes('active'));
+  }
   return ACTIVE_STATUS_CODES.has(clean) || clean === 'aktiv';
 }
 
 /**
  * Prüft, ob ein Status als passiv gilt.
  */
-export function isPassiveStatus(status: string): boolean {
+export function isPassiveStatus(status: string, rules?: FeeRuleSet): boolean {
   const clean = (status || '').toLowerCase().trim();
+  if (rules?.statusClassifications?.passiveCodes) {
+    const list = rules.statusClassifications.passiveCodes.map(c => c.toLowerCase().trim());
+    return list.includes(clean) || (clean === 'passiv' && list.includes('passive'));
+  }
   return PASSIVE_STATUS_CODES.has(clean) || clean === 'passiv';
 }
 
@@ -416,15 +428,14 @@ export function normalizeName(str: string): string {
  * Reguläre Vorstandsmitglieder (1./2. Vorstand, Schriftführerin, Kassier, Beisitzer etc.)
  * sind NICHT beitragsfrei und zahlen den regulären Mitgliedsbeitrag.
  */
-export function isHonoraryMember(member: Member): boolean {
+export function isHonoraryMember(member: Member, rules?: FeeRuleSet): boolean {
   const statusClean = (member.status || '').toLowerCase().trim();
-  if (
-    statusClean === MemberStatus.SPONSOR ||
-    statusClean === 'sponsor' ||
-    statusClean === 'ehrenmitglied' ||
-    statusClean === 'honorary'
-  ) {
-    return true;
+  if (rules?.statusClassifications?.honoraryCodes) {
+    const honoraryCodes = new Set(rules.statusClassifications.honoraryCodes.map(c => c.toLowerCase().trim()));
+    if (honoraryCodes.has(statusClean)) return true;
+  } else {
+    const defaultCodes = new Set([MemberStatus.SPONSOR, 'sponsor', 'ehrenmitglied', 'honorary']);
+    if (defaultCodes.has(statusClean)) return true;
   }
 
   const fields = [
@@ -433,23 +444,29 @@ export function isHonoraryMember(member: Member): boolean {
     member.otherFunction,
   ];
 
+  const keywords = rules?.exemptions?.honoraryKeywords && rules.exemptions.honoraryKeywords.length > 0
+    ? rules.exemptions.honoraryKeywords.map(k => k.toLowerCase().trim())
+    : [
+        'ehren',
+        'honorary',
+        'ehrenvorstand',
+        'ehrendirigent',
+        'ehrenmitglied',
+        'ehrenamtsinhaber',
+        'ehrenvorsitz',
+      ];
+
   const hasHonoraryRole = fields.some(f => {
     if (!f) return false;
     const lower = f.toLowerCase().trim();
-    return lower.includes('ehren') || lower === 'honorary';
+    return keywords.some(k => lower.includes(k));
   });
 
   if (hasHonoraryRole) return true;
 
   if (member.comment) {
     const commentLower = member.comment.toLowerCase().trim();
-    if (
-      commentLower.includes('ehrenmitglied') ||
-      commentLower.includes('ehrenvorstand') ||
-      commentLower.includes('ehrendirigent') ||
-      commentLower.includes('ehrenamtsinhaber') ||
-      commentLower.includes('ehrenvorsitz')
-    ) {
+    if (keywords.some(k => commentLower.includes(k))) {
       return true;
     }
   }
@@ -616,7 +633,16 @@ export function parseMembersCSV(csvText: string, referenceDate: Date = getDefaul
 /**
  * Hauptberechnung: Gruppierung der Zahler und Berechnung der Beiträge.
  */
-export function processContributions(members: Member[]): ContributionResult {
+export function processContributions(
+  members: Member[],
+  rules: FeeRuleSet = DEFAULT_SZI_RULES
+): ContributionResult {
+  const currentRules = rules || DEFAULT_SZI_RULES;
+  const childMaxAge = currentRules.ageThresholds.familyChildMaxAge;
+  const youthMaxAge = currentRules.ageThresholds.youthExemptMaxAge;
+  const singleRates = currentRules.rates.single;
+  const familyRates = currentRules.rates.family;
+
   const memberMap = new Map<string, Member>();
   members.forEach(m => memberMap.set(m.id, m));
 
@@ -667,7 +693,7 @@ export function processContributions(members: Member[]): ContributionResult {
   // bilden sie eine eigene beitragsfreie Zahlergruppe (ohne Fehler/Warnung).
   const remainingNonPayers: Member[] = [];
   nonPayers.forEach(m => {
-    if (isHonoraryMember(m) && !isInactiveMember(m)) {
+    if (isHonoraryMember(m, currentRules) && !isInactiveMember(m)) {
       const isPartnerOfExistingPayer = Boolean(
         (m.partner && m.partner !== '0' && payerGroups.has(m.partner)) ||
         Array.from(payerGroups.values()).some(g => g.payer.partner === m.id)
@@ -690,7 +716,11 @@ export function processContributions(members: Member[]): ContributionResult {
 
   remainingNonPayers.forEach(m => {
     let matchedPayerId: string | null = null;
-    const isOver25ActiveOrPassive = !isInactiveMember(m) && !isHonoraryMember(m) && m.age !== null && m.age >= 25;
+    const isOverMaxAgeActiveOrPassive =
+      !isInactiveMember(m) &&
+      !isHonoraryMember(m, currentRules) &&
+      m.age !== null &&
+      m.age >= childMaxAge;
 
     // Partner-Zuordnung (bidirektional):
     let partnerPayerId: string | null = null;
@@ -706,11 +736,11 @@ export function processContributions(members: Member[]): ContributionResult {
     }
     const isPartnerMatch = partnerPayerId !== null;
 
-    if (isOver25ActiveOrPassive) {
+    if (isOverMaxAgeActiveOrPassive) {
       if (isPartnerMatch) {
         matchedPayerId = partnerPayerId;
       }
-      // Wenn aktiv/passiv, >= 25 und kein Lebenspartner: Herauslösung aus dem Familienbeitrag (§ 2 Beitragsordnung)
+      // Wenn aktiv/passiv, >= Höchstalter und kein Lebenspartner: Herauslösung aus dem Familienbeitrag (§ 2 Beitragsordnung)
     } else {
       if (isPartnerMatch) {
         matchedPayerId = partnerPayerId;
@@ -763,10 +793,10 @@ export function processContributions(members: Member[]): ContributionResult {
     } else {
       // Gekündigte/verstorbene Mitglieder sowie beitragsfreie Ehrenmitglieder ohne Zahler
       // sind KEIN Fehler/Problem und erzeugen keine Warnung/Unassigned-Eintrag.
-      if (!isInactiveMember(m) && !isHonoraryMember(m)) {
-        const isChildWithAge18 = isChildOrYouthStatus(m.status) && m.age !== null && m.age >= 18;
-        let issue = isOver25ActiveOrPassive
-          ? 'Mitglied ist ≥ 25 Jahre alt ohne eigene IBAN (neue Mitgliedschaft erforderlich gem. § 2 Beitragsordnung).'
+      if (!isInactiveMember(m) && !isHonoraryMember(m, currentRules)) {
+        const isChildWithAge18 = isChildOrYouthStatus(m.status) && m.age !== null && m.age >= youthMaxAge;
+        let issue = isOverMaxAgeActiveOrPassive
+          ? `Mitglied ist ≥ ${childMaxAge} Jahre alt ohne eigene IBAN (neue Mitgliedschaft erforderlich gem. § 2 Beitragsordnung).`
           : 'Kein Zahler mit gültiger IBAN/Mandat zugeordnet.';
         if (isChildWithAge18) {
           issue += ` (Hinweis: Status „${getMemberStatusLabel(m.status)}“, aber bereits ${m.age} Jahre alt zum Stichtag 15.04.)`;
@@ -796,16 +826,16 @@ export function processContributions(members: Member[]): ContributionResult {
   payerGroups.forEach(group => {
     const payer = group.payer;
     const groupMembers = group.members;
-    const isPayerHonorary = isHonoraryMember(payer);
+    const isPayerHonorary = isHonoraryMember(payer, currentRules);
     const isInvoice = isInvoicePayer(payer.iban);
 
     // Alle lebenden Angehörigen (ohne Zahler selbst und ohne inaktive)
     const otherLivingMembers = groupMembers.filter(m => m.id !== payer.id && !isInactiveMember(m));
     // Lebende Angehörige, die KEINE Ehrenmitglieder sind
-    const nonHonoraryOtherLiving = otherLivingMembers.filter(m => !isHonoraryMember(m));
+    const nonHonoraryOtherLiving = otherLivingMembers.filter(m => !isHonoraryMember(m, currentRules));
 
     // Familienbeitrag (§ 2 Beitragsordnung):
-    // Wird ausschließlich über die tatsächliche Zuordnung von Angehörigen bestimmt (Lebenspartner, Kinder unter 25).
+    // Wird ausschließlich über die tatsächliche Zuordnung von Angehörigen bestimmt (Lebenspartner, Kinder unter Höchstalter).
     // Das zunft.app-Flag "Familienbeitrag (Zahler)" wird nicht mehr herangezogen.
     // Ein Verbund ist eine Familie, wenn neben dem Zahler mindestens ein weiteres lebendes,
     // nicht-ehrenamtliches Angehörigenmitglied zugeordnet ist.
@@ -834,9 +864,9 @@ export function processContributions(members: Member[]): ContributionResult {
       let reason = '';
 
       const isResignedOrDeceased = isInactiveMember(m);
-      const isHonorary = isHonoraryMember(m);
+      const isHonorary = isHonoraryMember(m, currentRules);
       const isChildByStatus = isChildOrYouthStatus(m.status);
-      const isUnder18 = m.age !== null ? m.age < 18 : isChildByStatus;
+      const isUnderYouthAge = m.age !== null ? m.age < youthMaxAge : isChildByStatus;
 
       if (isResignedOrDeceased) {
         fee = 0;
@@ -847,64 +877,64 @@ export function processContributions(members: Member[]): ContributionResult {
         reason = 'Beitragsfrei gem. § 1 Abs. 6 (Ehrenvorstand / Ehrenmitglied)';
       } else if (isPayerSelf) {
         if (isFamily) {
-          fee = 20.0;
+          fee = familyRates.basePayer;
           reason = 'Familienbeitrag (Zahler)';
           familyBaseAssigned = true;
         } else {
-          if (isUnder18) {
-            fee = 0;
-            reason = 'Jugendlicher unter 18 beitragsfrei';
-          } else if (m.status === 'active' || isActiveStatus(m.status)) {
-            fee = 25.0;
-            reason = m.status === 'active'
-              ? 'Erwachsener aktiv (25 €)'
-              : `Erwachsener aktiv (${getMemberStatusLabel(m.status)}) (25 €)`;
-          } else if (m.status === 'passive' || isPassiveStatus(m.status)) {
-            fee = 12.0;
-            reason = m.status === 'passive'
-              ? 'Erwachsener passiv (12 €)'
-              : `Erwachsener passiv (${getMemberStatusLabel(m.status)}) (12 €)`;
+          if (isUnderYouthAge) {
+            fee = singleRates.youthUnder18;
+            reason = `Jugendlicher unter ${youthMaxAge} beitragsfrei`;
+          } else if (isActiveStatus(m.status, currentRules)) {
+            fee = singleRates.adultActive;
+            reason = m.status === 'active' || m.status === 'aktiv'
+              ? `Erwachsener aktiv (${singleRates.adultActive} €)`
+              : `Erwachsener aktiv (${getMemberStatusLabel(m.status)}) (${singleRates.adultActive} €)`;
+          } else if (isPassiveStatus(m.status, currentRules)) {
+            fee = singleRates.adultPassive;
+            reason = m.status === 'passive' || m.status === 'passiv'
+              ? `Erwachsener passiv (${singleRates.adultPassive} €)`
+              : `Erwachsener passiv (${getMemberStatusLabel(m.status)}) (${singleRates.adultPassive} €)`;
           } else {
-            fee = 12.0;
-            reason = `Status ${getMemberStatusLabel(m.status)} als passiv veranlagt (12 €)`;
+            fee = singleRates.defaultFallback;
+            reason = `Status ${getMemberStatusLabel(m.status)} als passiv veranlagt (${singleRates.defaultFallback} €)`;
           }
         }
       } else {
         // Angehörige im Verbund
-        if (isUnder18) {
-          fee = 0;
-          reason = 'Kind/Jugendlicher unter 18 beitragsfrei';
-        } else if (isPayerHonorary && !familyBaseAssigned && (m.partner === payer.id || payer.partner === m.id || (m.age !== null && m.age >= 18))) {
+        if (isUnderYouthAge) {
+          fee = familyRates.youthUnder18;
+          reason = `Kind/Jugendlicher unter ${youthMaxAge} beitragsfrei`;
+        } else if (isPayerHonorary && !familyBaseAssigned && (m.partner === payer.id || payer.partner === m.id || (m.age !== null && m.age >= youthMaxAge))) {
           // Falls Zahler Ehrenmitglied ist und herausfällt, übernimmt der erste beitragspflichtige Angehörige den Sockel
-          fee = 20.0;
-          reason = 'Familienbeitrag über Angehörige(n) (20 €) [Zahler ist beitragsfreies Ehrenmitglied]';
+          fee = familyRates.basePayer;
+          reason = `Familienbeitrag über Angehörige(n) (${familyRates.basePayer} €) [Zahler ist beitragsfreies Ehrenmitglied]`;
           familyBaseAssigned = true;
         } else if (m.partner === payer.id || payer.partner === m.id) {
-          if (m.status === 'active' || isActiveStatus(m.status)) {
-            fee = 10.0;
-            reason = 'Aktiver Lebenspartner (+10 €)';
+          if (isActiveStatus(m.status, currentRules)) {
+            fee = familyRates.activePartner;
+            reason = `Aktiver Lebenspartner (+${familyRates.activePartner} €)`;
           } else {
-            fee = 0.0;
+            fee = familyRates.passivePartner;
             reason = 'Passiver Lebenspartner (im Familienbeitrag abgedeckt)';
           }
-        } else if (m.age !== null && m.age < 25) {
-          if (m.status === 'active' || isActiveStatus(m.status)) {
+        } else if (m.age !== null && m.age < childMaxAge) {
+          if (isActiveStatus(m.status, currentRules)) {
             activeChildrenCount++;
             if (activeChildrenCount === 1) {
-              fee = 10.0;
-              reason = '1. aktives Kind unter 25 Jahren (+10 €)';
+              fee = familyRates.firstActiveChild;
+              reason = `1. aktives Kind unter ${childMaxAge} Jahren (+${familyRates.firstActiveChild} €)`;
             } else {
-              fee = 0.0;
-              reason = `${activeChildrenCount}. aktives Kind unter 25 (beitragsfrei)`;
+              fee = familyRates.subsequentActiveChild;
+              reason = `${activeChildrenCount}. aktives Kind unter ${childMaxAge} (beitragsfrei)`;
             }
           } else {
-            fee = 0.0;
-            reason = 'Passives Kind unter 25 Jahren (im Familienbeitrag abgedeckt)';
+            fee = familyRates.passiveChild;
+            reason = `Passives Kind unter ${childMaxAge} Jahren (im Familienbeitrag abgedeckt)`;
           }
         } else {
-          errors.push(`Mitglied ${m.fullName} ist ≥ 25 Jahre alt (§ 2 Beitragsordnung) und darf nicht über die Familie abgebucht werden.`);
+          errors.push(`Mitglied ${m.fullName} ist ≥ ${childMaxAge} Jahre alt (§ 2 Beitragsordnung) und darf nicht über die Familie abgebucht werden.`);
           fee = 0;
-          reason = 'Fehler: Mitglied ≥ 25 Jahre (eigene Mitgliedschaft erforderlich)';
+          reason = `Fehler: Mitglied ≥ ${childMaxAge} Jahre (eigene Mitgliedschaft erforderlich)`;
         }
       }
 
@@ -947,7 +977,7 @@ export function processContributions(members: Member[]): ContributionResult {
     // Wenn weitere beitragspflichtige Angehörige vorhanden sind, Warnung erzeugen!
     if (isPayerHonorary && nonHonoraryOtherLiving.length > 0) {
       const liableOthers = nonHonoraryOtherLiving.filter(m => {
-        const isUnder18 = m.age !== null ? m.age < 18 : isChildOrYouthStatus(m.status);
+        const isUnder18 = m.age !== null ? m.age < youthMaxAge : isChildOrYouthStatus(m.status);
         return !isUnder18;
       });
       if (liableOthers.length > 0) {
@@ -959,7 +989,7 @@ export function processContributions(members: Member[]): ContributionResult {
 
     // Angehörige, die Ehrenmitglieder sind, erzeugen Hinweis zur Herauslösung
     if (!isPayerHonorary) {
-      const honoraryOthers = otherLivingMembers.filter(m => isHonoraryMember(m));
+      const honoraryOthers = otherLivingMembers.filter(m => isHonoraryMember(m, currentRules));
       honoraryOthers.forEach(hm => {
         warnings.push(
           `Angehörige(r) ${hm.fullName} ist beitragsfreies Ehrenmitglied (§ 1 Abs. 6) und fällt aus dem Familienbeitrag heraus.`
@@ -970,7 +1000,7 @@ export function processContributions(members: Member[]): ContributionResult {
     // Prüfen auf Diskrepanz Status "Kind" aber Alter >= 18 zum Stichtag 15.04.
     groupMembers.forEach(m => {
       const isChildByStatus = isChildOrYouthStatus(m.status);
-      if (isChildByStatus && m.age !== null && m.age >= 18) {
+      if (isChildByStatus && m.age !== null && m.age >= youthMaxAge) {
         warnings.push(
           `Mitglied ${m.fullName} (${m.id}) hat Status „${getMemberStatusLabel(m.status)}“, ist aber zum Stichtag (15.04.) bereits ${m.age} Jahre alt (Stammdaten prüfen).`
         );

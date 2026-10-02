@@ -20,6 +20,7 @@ import {
   getMemberStatusLabel,
   maskIBAN,
 } from '../utils/sepaCalculator.ts';
+import { PayerDelta } from '../utils/comparison.ts';
 
 interface PayerTableProps {
   filteredPayerGroups: PayerGroup[];
@@ -35,6 +36,7 @@ interface PayerTableProps {
   onTogglePrivacyMode: () => void;
   revealedIbans: Set<string>;
   onToggleRevealIban: (payerId: string) => void;
+  payerDeltas?: Map<string, PayerDelta> | null;
 }
 
 export function PayerTable({
@@ -51,6 +53,7 @@ export function PayerTable({
   onTogglePrivacyMode,
   revealedIbans,
   onToggleRevealIban,
+  payerDeltas,
 }: PayerTableProps): React.JSX.Element {
   const allFilteredSelected =
     filteredPayerGroups.length > 0 &&
@@ -123,6 +126,7 @@ export function PayerTable({
       <div className="divide-y divide-stone-200">
         {filteredPayerGroups.map(group => {
           const isExpanded = expandedPayers.has(group.payerId);
+          const payerDelta = payerDeltas?.get(group.payerId);
 
           return (
             <div
@@ -276,8 +280,29 @@ export function PayerTable({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between md:justify-end gap-5 pl-7 md:pl-0 shrink-0">
-                  <div className="text-right shrink-0">
+                <div className="flex items-center justify-between md:justify-end gap-3 pl-7 md:pl-0 shrink-0">
+                  {/* Delta-Spalte für A/B-Vergleich: Feste Breite links vom Betrag */}
+                  {payerDeltas && (
+                    <div className="w-24 flex items-center justify-end shrink-0">
+                      {payerDelta && payerDelta.deltaAmount !== 0 ? (
+                        <span
+                          className={`text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center leading-none ${
+                            payerDelta.deltaAmount > 0
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                          title={`Referenzbeitrag: ${payerDelta.baselineAmount.toFixed(2).replace('.', ',')} €`}
+                        >
+                          {payerDelta.deltaAmount > 0 ? '+' : ''}
+                          {payerDelta.deltaAmount.toFixed(2).replace('.', ',')}&nbsp;€
+                        </span>
+                      ) : (
+                        <span className="text-xs text-stone-300 font-normal px-2">±0 €</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-right shrink-0 min-w-[95px]">
                     <div className="text-xl font-bold text-[#261420] font-mono whitespace-nowrap">
                       {group.totalAmount.toFixed(2).replace('.', ',')}&nbsp;€
                     </div>
@@ -316,46 +341,65 @@ export function PayerTable({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-200">
-                        {group.members.map(m => (
-                          <tr key={m.id} className="hover:bg-white/80 transition-colors">
-                            <td className="py-2.5 font-mono text-stone-500">#{m.id}</td>
-                            <td className="py-2.5 font-semibold text-[#261420]">
-                              {m.fullName}
-                              {m.id === group.payerId && (
-                                <span className="ml-2 text-[10px] bg-[#9565C8] text-white px-1.5 py-0.5 rounded font-medium">
-                                  Zahler
+                        {group.members.map(m => {
+                          const mDelta = payerDelta?.memberDeltas.find(md => md.memberId === m.id);
+
+                          return (
+                            <tr key={m.id} className="hover:bg-white/80 transition-colors">
+                              <td className="py-2.5 font-mono text-stone-500">#{m.id}</td>
+                              <td className="py-2.5 font-semibold text-[#261420]">
+                                {m.fullName}
+                                {m.id === group.payerId && (
+                                  <span className="ml-2 text-[10px] bg-[#9565C8] text-white px-1.5 py-0.5 rounded font-medium">
+                                    Zahler
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold mr-1.5 ${
+                                    isHonoraryMember(m)
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : m.status === 'active' || isActiveStatus(m.status)
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : m.status === 'passive' || isPassiveStatus(m.status)
+                                      ? 'bg-stone-200 text-stone-700'
+                                      : isChildOrYouthStatus(m.status)
+                                      ? 'bg-sky-100 text-sky-800'
+                                      : 'bg-stone-100 text-stone-700'
+                                  }`}
+                                >
+                                  {getMemberStatusLabel(m.status)}
                                 </span>
-                              )}
-                            </td>
-                            <td className="py-2.5">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold mr-1.5 ${
-                                  isHonoraryMember(m)
-                                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                    : m.status === 'active' || isActiveStatus(m.status)
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                    : m.status === 'passive' || isPassiveStatus(m.status)
-                                    ? 'bg-stone-200 text-stone-700'
-                                    : isChildOrYouthStatus(m.status)
-                                    ? 'bg-sky-100 text-sky-800'
-                                    : 'bg-stone-100 text-stone-700'
-                                }`}
-                              >
-                                {getMemberStatusLabel(m.status)}
-                              </span>
-                              <span className="text-stone-500">
-                                {m.age !== null ? `${m.age} J.` : 'Kein Datum'}
-                              </span>
-                            </td>
-                            <td className="py-2.5 text-stone-600 font-medium">
-                              {m.boardFunction || m.otherFunction || m.clubFunction || '—'}
-                            </td>
-                            <td className="py-2.5 text-stone-600">{m.reason}</td>
-                            <td className="py-2.5 font-bold text-[#261420] text-right font-mono whitespace-nowrap">
-                              {m.fee.toFixed(2).replace('.', ',')}&nbsp;€
-                            </td>
-                          </tr>
-                        ))}
+                                <span className="text-stone-500">
+                                  {m.age !== null ? `${m.age} J.` : 'Kein Datum'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 text-stone-600 font-medium">
+                                {m.boardFunction || m.otherFunction || m.clubFunction || '—'}
+                              </td>
+                              <td className="py-2.5 text-stone-600">{m.reason}</td>
+                              <td className="py-2.5 font-bold text-[#261420] text-right font-mono whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-2">
+                                  {mDelta && mDelta.deltaFee !== 0 ? (
+                                    <span
+                                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded leading-none ${
+                                        mDelta.deltaFee > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                      }`}
+                                      title={`Referenz: ${mDelta.baselineFee.toFixed(2).replace('.', ',')} € (${mDelta.baselineReason})`}
+                                    >
+                                      {mDelta.deltaFee > 0 ? '+' : ''}
+                                      {mDelta.deltaFee.toFixed(2).replace('.', ',')}&nbsp;€
+                                    </span>
+                                  ) : payerDelta ? (
+                                    <span className="text-[10px] text-stone-300 font-normal">±0 €</span>
+                                  ) : null}
+                                  <span className="min-w-[65px] text-right">{m.fee.toFixed(2).replace('.', ',')}&nbsp;€</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://szi-ingoldingen.de/schemas/fee-rules-v1.json",
+  "id": "szi-standard-2024",
+  "name": "SZI Beitragsordnung (Stand 2024)",
+  "version": "1.0.0",
+  "effectiveFrom": "2024-04-15",
+  "currency": "EUR",
+  "description": "Historische Beitragsordnung des Schalmeienzug Ingoldingen e.V. vor der Beitragsanpassung 2025",
+  "isDefault": false,
+  "filename": "szi_beitragsordnung_2024.json",
+  "isOfficial": true,
+
+  "timing": {
+    "cutoffDay": 15,
+    "cutoffMonth": 4,
+    "comment": "Stichtag für Altersberechnungen ist der 15. April des laufenden Beitragsjahres"
+  },
+
+  "ageThresholds": {
+    "youthExemptMaxAge": 18,
+    "familyChildMaxAge": 25
+  },
+
+  "rates": {
+    "single": {
+      "adultActive": 20.0,
+      "adultPassive": 10.0,
+      "youthUnder18": 0.0,
+      "defaultFallback": 10.0
+    },
+    "family": {
+      "basePayer": 18.0,
+      "activePartner": 8.0,
+      "passivePartner": 0.0,
+      "firstActiveChild": 8.0,
+      "subsequentActiveChild": 0.0,
+      "passiveChild": 0.0,
+      "youthUnder18": 0.0
+    },
+    "specialFees": {
+      "invoiceExtraCharge": 5.0,
+      "instrumentDeposit": 100.0
+    }
+  },
+
+  "statusClassifications": {
+    "activeCodes": [
+      "active",
+      "premium",
+      "limited",
+      "twen",
+      "teen",
+      "child",
+      "infant"
+    ],
+    "passiveCodes": [
+      "passive",
+      "pprem",
+      "plimit",
+      "pinfant",
+      "pkid",
+      "pteen",
+      "ptwen",
+      "passiv"
+    ],
+    "honoraryCodes": [
+      "honorary"
+    ],
+    "guestCodes": [
+      "guest",
+      "extern",
+      "free"
+    ]
+  },
+
+  "exemptions": {
+    "honoraryKeywords": [
+      "ehrenmitglied",
+      "ehrenvorstand"
+    ],
+    "regularBoardIsPayable": true
+  }
+}

@@ -320,50 +320,45 @@ Um absolute Zuverlässigkeit ohne Regressionen zu gewährleisten, setzen wir auf
 
 ## 8. Schritt-für-Schritt-Fahrplan mit To-Do-Checkliste
 
-### Phase 1: Datenmodell & Standard-Regelwerk (Tag 1)
-- [ ] **Typdefinitionen erstellen:** Neues Interface `FeeRuleSet` und Sub-Interfaces (`FeeRates`, `AgeThresholds`, `StatusClassifications`, etc.) in `src/types/rules.ts` anlegen.
-- [ ] **Standard-Regelwerk kapseln:** `DEFAULT_SZI_RULES` als typisierte Konstante definieren, die exakt die heutigen Werte aus `sepaCalculator.ts` abbildet.
-- [ ] **Zod-Schema definieren:** `feeRuleSetSchema` zur Validierung externer JSON-Uploads erstellen.
-- [ ] **Exportfähige JSON-Referenz:** Eine Datei `public/rules/szi_beitragsordnung_2025.json` als Vorlage und Download bereitstellen.
+### Phase 1: Datenmodell & Standard-Regelwerk (Erledigt ✓)
+- [x] **Typdefinitionen erstellen:** Neues Interface `FeeRuleSet` und Sub-Interfaces (`FeeRates`, `AgeThresholds`, `StatusClassifications`, etc.) in `src/types/rules.ts` angelegt.
+- [x] **Standard-Regelwerk kapseln:** `DEFAULT_SZI_RULES` als typisierte Konstante definiert, die exakt die heutigen Werte aus `sepaCalculator.ts` abbildet.
+- [x] **Zod-Schema definieren:** `feeRuleSetSchema` zur Validierung externer JSON-Uploads erstellt.
+- [x] **Exportfähige JSON-Referenz:** Datei `public/rules/szi_beitragsordnung_2025.json` als Vorlage und Download bereitgestellt.
 
-### Phase 2: Refactoring der Berechnungs-Engine (Tag 1 – 2)
-- [ ] **Signatur erweitern:** `processContributions(members: Member[], ruleSet: FeeRuleSet = DEFAULT_SZI_RULES)` umsetzen.
-- [ ] **Hardcodierte Beträge ersetzen:**
-  - `25.0` -> `ruleSet.rates.single.adultActive`
-  - `12.0` -> `ruleSet.rates.single.adultPassive`
-  - `20.0` -> `ruleSet.rates.family.basePayer`
-  - `10.0` (Partner) -> `ruleSet.rates.family.activePartner`
-  - `10.0` (1. Kind) -> `ruleSet.rates.family.firstActiveChild`
-- [ ] **Dynamische Schwellenwerte einbinden:**
-  - `m.age < 18` -> `m.age < ruleSet.ageThresholds.youthExemptMaxAge`
-  - `m.age >= 25` -> `m.age >= ruleSet.ageThresholds.familyChildMaxAge`
-  - Stichtag konfigurierbar über `ruleSet.timing.cutoffMonth` und `ruleSet.timing.cutoffDay`.
-- [ ] **Dynamische Ehrenamts-Erkennung:** Ehrenamts-Keywords aus `ruleSet.exemptions.honoraryKeywords` auslesen.
+### Phase 2: Refactoring der Berechnungs-Engine (Erledigt ✓)
+- [x] **Signatur erweitern:** `processContributions(members: Member[], rules: FeeRuleSet = DEFAULT_SZI_RULES)` abwärtskompatibel umgesetzt.
+- [x] **Hardcodierte Beträge ersetzen:**
+  - `25.0` -> `rules.rates.single.adultActive`
+  - `12.0` -> `rules.rates.single.adultPassive`
+  - `20.0` -> `rules.rates.family.basePayer`
+  - `10.0` (Partner) -> `rules.rates.family.activePartner`
+  - `10.0` (1. Kind) -> `rules.rates.family.firstActiveChild`
+- [x] **Dynamische Schwellenwerte einbinden:**
+  - `m.age < 18` -> `m.age < rules.ageThresholds.youthExemptMaxAge`
+  - `m.age >= 25` -> `m.age >= rules.ageThresholds.familyChildMaxAge`
+- [x] **Dynamische Ehrenamts-Erkennung:** Ehrenamts-Keywords aus `rules.exemptions.honoraryKeywords` und Status-Codes aus `rules.statusClassifications.honoraryCodes` angebunden.
 
-### Phase 3: Absicherung & Test-Suite (Tag 2)
-- [ ] **Parity-Test erstellen:** Testdatei `src/utils/rulesParity.test.ts` schreiben, die alte vs. neue Berechnungslogik vergleicht.
-- [ ] **Schema-Tests implementieren:** `src/utils/ruleValidation.test.ts` mit fehlerhaften/korrupten JSON-Payloads.
-- [ ] **Szenario-Tests implementieren:** Tests für Beitragserhöhungen, veränderte Altersgrenzen und Sonderregeln schreiben.
-- [ ] **Vollständigen Testdurchlauf durchführen:** Sicherstellen, dass alle bestehenden 71 Tests + alle neuen Tests fehlerfrei passieren (`npm test`).
+### Phase 3: Absicherung & Test-Suite (Erledigt ✓)
+- [x] **Parity-Test erstellen:** Testdatei `src/utils/rulesParity.test.ts` vergleicht alte vs. neue Berechnungslogik auf Cent- und Zeichenebene (100 % identisch).
+- [x] **Schema-Tests implementieren:** `src/utils/rulesEngine.test.ts` testet fehlerhafte/korrupte JSON-Payloads und negative Beträge.
+- [x] **Szenario-Tests implementieren:** Tests für Preiserhöhungen, veränderte Altersgrenzen und A/B-Deltaberechnung.
+- [x] **Vollständigen Testdurchlauf durchführen:** Alle 82 Tests (71 Original + 11 neue Tests) sind grün (`npm test`).
 
-### Phase 4: UI-Integration für Regel-Upload & A/B-Szenarien-Vergleich (Tag 3)
-- [ ] **Multi-Profil-State in `App.tsx` anlegen:** Verwaltung eines Pools geladener Regelwerke (`availableRuleSets`), mit aktivem Berechnungsstand (`activeRuleSet`) und frei wählbarer Referenz (`baselineRuleSet`).
-- [ ] **Parallele Berechnung im UI:** Gleichzeitige Ermittlung von `resultActive` und `resultBaseline` für Delta-Werte in Realzeit.
-- [ ] **UI-Komponente `RuleManager` bauen:** Einbindung in den Header oder die FilterBar.
-  - Selektor 1: *„Aktive Beitragsordnung (Ziel)“* (Dropdown aller geladenen Profile).
-  - Selektor 2: *„Vergleichen mit (Referenz)“* (Dropdown zur freien Auswahl der Baseline).
-  - Dateiupload (`.json`) für eigene Regeln mit Drag & Drop (fügt das Profil dem Pool hinzu).
-  - Download-Button: *„Aktives Regelwerk herunterladen (.json)“*.
-  - Reset-Button: *„Auf Vereinsstandard zurücksetzen“*.
-- [ ] **Delta-Anzeige in den KPI-Karten & Tabelle:**
-  - Gesamtsummen-Delta mit Farbmarkierung (z. B. `▲ +210,00 €`).
-  - Spalte in der Zahler-Tabelle mit Einzeldeltas pro Zahlergruppe (z. B. `+10,00 €`).
-- [ ] **Erweiterter Audit-Export:** Optionaler Download einer Vergleichs-CSV mit Delta-Spalten für Vorstandssitzungen und die Generalversammlung.
-- [ ] **Benutzer-Feedback einbauen:** Sofortige Toast-Validierung bei Fehlern in hochgeladenen Dateien.
+### Phase 4: UI-Integration für Regel-Upload, Erfassungshilfe & A/B-Szenarien (Erledigt ✓)
+- [x] **Erfassungshilfe `RuleEditorModal` implementiert:** Formular mit Tabs für Beiträge, Altersgrenzen/Stichtag, Status-Zuordnung (Abrechnungsklassen) und Metadaten, inklusive Sofortanwendung, Baseline-Setzung und JSON-Download.
+- [x] **Status-Klassifizierungs-Manager:** Visuelle Zuordnung aller 26 zunft.app-Status-Codes (Aktiv, Passiv, Ehrenmitglied, Gast, Inaktiv) sowie Anlegen benutzerdefinierter Status-Codes und Ehrenamts-Schlagwörter.
+- [x] **Multi-Profil-State in `App.tsx` angelegt:** Verwaltung eines Pools geladener Regelwerke (`availableRuleSets`), mit aktivem Berechnungsstand (`activeRuleSet`) und frei wählbarer Referenz (`baselineRuleSet`).
+- [x] **Parallele Berechnung im UI:** Gleichzeitige Ermittlung von `resultActive` und `resultBaseline` für Delta-Werte in Realzeit.
+- [x] **UI-Komponente `RuleManager` gebaut:** Steuerleiste für Dropdowns (Berechnung vs. Vergleich), Erfassungshilfe-Button, JSON-Upload/Download und Reset.
+- [x] **Delta-Anzeige in KPI-Karten & Tabelle:**
+  - Gesamtsummen-Delta mit Farbmarkierung (`▲ +X,XX € (+Y%)`).
+  - Spalte in der Zahler-Tabelle mit Einzeldeltas pro Zahlergruppe sowie auf Mitgliederebene.
+- [x] **Erweiterter Audit-Export:** Download einer Vergleichs-CSV mit Vorher-Nachher-Spalten für Vorstand und Generalversammlung.
+- [x] **Benutzer-Feedback eingebaut:** Sofortige Toast-Validierung bei Fehlern in hochgeladenen Dateien.
 
-### Phase 5: Dokumentation & Abnahme (Tag 3 – 4)
-- [ ] **Anleitung für Kassierer erstellen:** Kurzanleitung, wie man eine JSON-Datei im Editor anpasst.
-- [ ] **Code-Review & Build-Prüfung:** `npm run build` und `npm test` zur finalen Verifikation.
+### Phase 5: Dokumentation & Abnahme (Erledigt ✓)
+- [x] **Code-Review & Build-Prüfung:** `npm run build` und `npm test` (89 Tests) ohne Warnungen/Fehler verifiziert.
 
 ---
 

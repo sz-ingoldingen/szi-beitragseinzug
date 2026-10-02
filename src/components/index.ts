@@ -6,3 +6,6 @@ export { UnassignedPanel } from './UnassignedPanel.tsx';
 export { InactivePanel } from './InactivePanel.tsx';
 export { PayerTable } from './PayerTable.tsx';
 export { ExportBar } from './ExportBar.tsx';
+export { RuleEditorModal } from './RuleEditorModal.tsx';
+export { RuleManager } from './RuleManager.tsx';
+export { GitHubPublishModal } from './GitHubPublishModal.tsx';
